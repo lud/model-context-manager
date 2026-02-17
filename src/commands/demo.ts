@@ -1,21 +1,18 @@
 import type { Command } from "commander";
 import * as p from "@clack/prompts";
 import ansis from "ansis";
+import { Prompts } from "../lib/command-types";
 
 export type Language = "english" | "french";
 export type Color = "red" | "blue";
 
-export interface Prompts {
-  intro(title: string): void;
-  outro(message: string): void;
-  cancel(message: string): void;
-  select<T>(opts: {
-    message: string;
-    options: { value: T; label?: string; hint?: string; disabled?: boolean }[];
-  }): Promise<T | symbol>;
-  text(opts: { message: string; validate?: (value?: string) => string | undefined }): Promise<string | symbol>;
-  isCancel(value: unknown): value is symbol;
+export function register(program: Command) {
+  program
+    .command("demo")
+    .description("Interactive greeting demo")
+    .action(() => run());
 }
+
 
 const defaultPrompts: Prompts = p;
 
@@ -72,9 +69,3 @@ export async function run(prompts: Prompts = defaultPrompts) {
   prompts.outro(colorize(greeting, color));
 }
 
-export function register(program: Command) {
-  program
-    .command("demo")
-    .description("Interactive greeting demo")
-    .action(() => run());
-}

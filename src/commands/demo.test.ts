@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { greet, colorize, run, type Prompts } from "./demo.js";
+import { greet, colorize, run } from "./demo.js";
+import { type Prompts } from "../lib/command-types.js";
 import ansis from "ansis";
 
 describe("greet", () => {
