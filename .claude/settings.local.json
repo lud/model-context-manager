@@ -8,7 +8,8 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:circleci.com)",
       "WebFetch(domain:vitest.dev)",
-      "Bash(npx vitest:*)"
+      "Bash(npx vitest:*)",
+      "Bash(git -C /home/lud/src/mcm log --oneline -20)"
     ]
   }
 }
