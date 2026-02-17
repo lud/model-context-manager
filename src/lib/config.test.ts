@@ -1,10 +1,37 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { locateConfigFile } from "./config.js";
+import { ZodError } from "zod";
+import { locateConfigFile, parseConfig } from "./config.js";
 import { join } from "node:path";
 import { mkdtempSync, mkdirSync, chmodSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 const fixtures = join(import.meta.dirname, "../../test/fixtures", "config-lookup");
+
+describe("parseConfig", () => {
+  it("returns default config for empty object", () => {
+    expect(parseConfig({})).toEqual({ extend: false });
+  });
+
+  it("respects extend: true when provided", () => {
+    expect(parseConfig({ extend: true })).toEqual({ extend: true });
+  });
+
+  it("throws ZodError when extend is wrong type", () => {
+    expect(() => parseConfig({ extend: "yes" })).toThrow(ZodError);
+  });
+
+  it("throws ZodError when passed null", () => {
+    expect(() => parseConfig(null)).toThrow(ZodError);
+  });
+
+  it("throws ZodError when passed a non-object", () => {
+    expect(() => parseConfig(42)).toThrow(ZodError);
+  });
+
+  it("strips unknown fields from output", () => {
+    expect(parseConfig({ extend: false, unknown: "field" })).toEqual({ extend: false });
+  });
+});
 
 describe("locateConfigFile", () => {
   it("finds .mcm.json in cwd", () => {

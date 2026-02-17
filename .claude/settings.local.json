@@ -9,7 +9,9 @@
       "WebFetch(domain:circleci.com)",
       "WebFetch(domain:vitest.dev)",
       "Bash(npx vitest:*)",
-      "Bash(git -C /home/lud/src/mcm log --oneline -20)"
+      "Bash(git -C /home/lud/src/mcm log --oneline -20)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm test:*)"
     ]
   }
 }
