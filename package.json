@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "tsx src/main.ts",
     "typecheck": "tsc --noEmit",
-    "build": "bun build src/main.ts --compile --outfile dist/mcm"
+    "build": "bun build src/main.ts --compile --outfile dist/mcm",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@clack/prompts": "^1.0.1",
@@ -15,6 +17,7 @@
   "devDependencies": {
     "@types/node": "^25.2.3",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   }
 }

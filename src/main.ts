@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { register as demo } from "./commands/demo.js";
 
 const program = new Command();
 
@@ -7,12 +8,6 @@ program
   .version("0.1.0")
   .description("A general-purpose CLI for file management and project utilities");
 
-program
-  .command("demo")
-  .description("Interactive greeting demo")
-  .action(async () => {
-    const { run } = await import("./commands/demo.js");
-    await run();
-  });
+demo(program);
 
 program.parse();

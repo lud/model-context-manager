@@ -3,7 +3,12 @@
     "allow": [
       "Bash(npm install:*)",
       "Bash(npx tsc:*)",
-      "Bash(npx tsx:*)"
+      "Bash(npx tsx:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:circleci.com)",
+      "WebFetch(domain:vitest.dev)",
+      "Bash(npx vitest:*)"
     ]
   }
 }
