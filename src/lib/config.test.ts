@@ -1,73 +1,79 @@
-import { afterAll, describe, expect, it } from "vitest";
-import { ZodError } from "zod";
-import { locateConfigFile, parseConfig } from "./config.js";
-import { join } from "node:path";
-import { mkdtempSync, mkdirSync, chmodSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { afterAll, describe, expect, it } from "vitest"
+import { ZodError } from "zod"
+import { locateConfigFile, parseConfig } from "./config.js"
+import { join } from "node:path"
+import { mkdtempSync, mkdirSync, chmodSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
 
-const fixtures = join(import.meta.dirname, "../../test/fixtures", "config-lookup");
+const fixtures = join(
+  import.meta.dirname,
+  "../../test/fixtures",
+  "config-lookup",
+)
 
 describe("parseConfig", () => {
   it("returns default config for empty object", () => {
-    expect(parseConfig({})).toEqual({ extend: false });
-  });
+    expect(parseConfig({})).toEqual({ extend: false })
+  })
 
   it("respects extend: true when provided", () => {
-    expect(parseConfig({ extend: true })).toEqual({ extend: true });
-  });
+    expect(parseConfig({ extend: true })).toEqual({ extend: true })
+  })
 
   it("throws ZodError when extend is wrong type", () => {
-    expect(() => parseConfig({ extend: "yes" })).toThrow(ZodError);
-  });
+    expect(() => parseConfig({ extend: "yes" })).toThrow(ZodError)
+  })
 
   it("throws ZodError when passed null", () => {
-    expect(() => parseConfig(null)).toThrow(ZodError);
-  });
+    expect(() => parseConfig(null)).toThrow(ZodError)
+  })
 
   it("throws ZodError when passed a non-object", () => {
-    expect(() => parseConfig(42)).toThrow(ZodError);
-  });
+    expect(() => parseConfig(42)).toThrow(ZodError)
+  })
 
   it("strips unknown fields from output", () => {
-    expect(parseConfig({ extend: false, unknown: "field" })).toEqual({ extend: false });
-  });
-});
+    expect(parseConfig({ extend: false, unknown: "field" })).toEqual({
+      extend: false,
+    })
+  })
+})
 
 describe("locateConfigFile", () => {
   it("finds .mcm.json in cwd", () => {
-    const start = join(fixtures, "with-config");
+    const start = join(fixtures, "with-config")
     console.log(`start`, start)
-    expect(locateConfigFile(start)).toBe(join(start, ".mcm.json"));
-  });
+    expect(locateConfigFile(start)).toBe(join(start, ".mcm.json"))
+  })
 
   it("finds .mcm.json in ancestor directory", () => {
-    const start = join(fixtures, "with-config", "nested", "deeply");
+    const start = join(fixtures, "with-config", "nested", "deeply")
     expect(locateConfigFile(start)).toBe(
       join(fixtures, "with-config", ".mcm.json"),
-    );
-  });
+    )
+  })
 
   it("returns null when no config exists", () => {
-    const start = join(fixtures, "without-config", "nested", "deeply");
-    expect(locateConfigFile(start)).toBeNull();
-  });
+    const start = join(fixtures, "without-config", "nested", "deeply")
+    expect(locateConfigFile(start)).toBeNull()
+  })
 
-  const isRoot = process.getuid?.() === 0;
-  const tmp = !isRoot ? mkdtempSync(join(tmpdir(), "mcm-test-")) : null;
+  const isRoot = process.getuid?.() === 0
+  const tmp = !isRoot ? mkdtempSync(join(tmpdir(), "mcm-test-")) : null
 
   afterAll(() => {
     if (tmp) {
-      chmodSync(join(tmp, "no-access"), 0o755);
-      rmSync(tmp, { recursive: true });
+      chmodSync(join(tmp, "no-access"), 0o755)
+      rmSync(tmp, { recursive: true })
     }
-  });
+  })
 
   it.skipIf(isRoot)("returns null on permission error", () => {
-    const noAccess = join(tmp!, "no-access");
-    const child = join(noAccess, "child");
-    mkdirSync(child, { recursive: true });
-    chmodSync(noAccess, 0o000);
+    const noAccess = join(tmp!, "no-access")
+    const child = join(noAccess, "child")
+    mkdirSync(child, { recursive: true })
+    chmodSync(noAccess, 0o000)
 
-    expect(locateConfigFile(child)).toBeNull();
-  });
-});
+    expect(locateConfigFile(child)).toBeNull()
+  })
+})

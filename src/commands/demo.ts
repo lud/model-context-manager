@@ -1,71 +1,76 @@
-import type { Command } from "commander";
-import * as p from "@clack/prompts";
-import ansis from "ansis";
-import { Prompts } from "../lib/command-types";
+import { command } from "cleye"
+import * as p from "@clack/prompts"
+import ansis from "ansis"
+import { getConfig } from "../lib/config.js"
 
-export type Language = "english" | "french";
-export type Color = "red" | "blue";
+export type Language = "english" | "french"
+export type Color = "red" | "blue"
 
-export function register(program: Command) {
-  program
-    .command("demo")
-    .description("Interactive greeting demo")
-    .action(() => run());
-}
+export const demoCommand = command(
+  {
+    name: "demo",
+    parameters: ["<first name>"],
+    flags: {
+      port: {
+        type: Number,
+        description: "port number",
+        default: 80,
+      },
+    },
+  },
+  async (argv) => {
+    const config = getConfig()
 
+    p.intro("Welcome to the greeting demo!")
+    p.log.info(`Config: extend = ${config.extend}`)
 
-const defaultPrompts: Prompts = p;
+    const language = await p.select<Language>({
+      message: "Pick a language",
+      options: [
+        { value: "english", label: "English" },
+        { value: "french", label: "French" },
+      ],
+    })
+
+    if (p.isCancel(language)) {
+      p.cancel("Cancelled.")
+      process.exit(0)
+    }
+
+    const color = await p.select<Color>({
+      message: "Pick a color",
+      options: [
+        { value: "red", label: "Red" },
+        { value: "blue", label: "Blue" },
+      ],
+    })
+
+    if (p.isCancel(color)) {
+      p.cancel("Cancelled.")
+      process.exit(0)
+    }
+
+    const name = await p.text({
+      message: "What is your name?",
+      validate: (value = "") => {
+        if (!value.trim()) return "Name is required"
+      },
+    })
+
+    if (p.isCancel(name)) {
+      p.cancel("Cancelled.")
+      process.exit(0)
+    }
+
+    p.outro(colorize(greet(name, language), color))
+    p.outro(colorize(greet(argv._.firstName, language), color))
+  },
+)
 
 export function greet(name: string, language: Language): string {
-  return language === "french" ? `Bonjour ${name}` : `Hello ${name}`;
+  return language === "french" ? `Bonjour ${name}` : `Hello ${name}`
 }
 
 export function colorize(text: string, color: Color): string {
-  return color === "red" ? ansis.red(text) : ansis.blue(text);
+  return color === "red" ? ansis.red(text) : ansis.blue(text)
 }
-
-export async function run(prompts: Prompts = defaultPrompts) {
-  prompts.intro("Welcome to the greeting demo!");
-
-  const language = await prompts.select<Language>({
-    message: "Pick a language",
-    options: [
-      { value: "english", label: "English" },
-      { value: "french", label: "French" },
-    ],
-  });
-
-  if (prompts.isCancel(language)) {
-    prompts.cancel("Cancelled.");
-    process.exit(0);
-  }
-
-  const color = await prompts.select<Color>({
-    message: "Pick a color",
-    options: [
-      { value: "red", label: "Red" },
-      { value: "blue", label: "Blue" },
-    ],
-  });
-
-  if (prompts.isCancel(color)) {
-    prompts.cancel("Cancelled.");
-    process.exit(0);
-  }
-
-  const name = await prompts.text({
-    message: "What is your name?",
-    validate: (value = "") => {
-      if (!value.trim()) return "Name is required";
-    },
-  });
-
-  if (prompts.isCancel(name)) {
-    prompts.cancel("Cancelled.");
-    process.exit(0);
-  }
-
-  const greeting = greet(name, language);
-  prompts.outro(colorize(greeting, color));
-}
-

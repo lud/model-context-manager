@@ -1,73 +1,89 @@
-import { describe, expect, it, vi } from "vitest";
-import { greet, colorize, run } from "./demo.js";
-import { type Prompts } from "../lib/command-types.js";
-import ansis from "ansis";
+import { describe, expect, it, vi, beforeEach } from "vitest"
+import * as p from "@clack/prompts"
+import { greet, colorize, demoCommand } from "./demo.js"
+import { mockConfig } from "../lib/config.test-helpers.js"
+import ansis from "ansis"
+
+vi.mock("@clack/prompts")
+vi.mock("../lib/config.js")
 
 describe("greet", () => {
   it("greets in english", () => {
-    expect(greet("Alice", "english")).toBe("Hello Alice");
-  });
+    expect(greet("Alice", "english")).toBe("Hello Alice")
+  })
 
   it("greets in french", () => {
-    expect(greet("Alice", "french")).toBe("Bonjour Alice");
-  });
-});
+    expect(greet("Alice", "french")).toBe("Bonjour Alice")
+  })
+})
 
 describe("colorize", () => {
   it("colorizes in red", () => {
-    expect(colorize("hello", "red")).toBe(ansis.red("hello"));
-  });
+    expect(colorize("hello", "red")).toBe(ansis.red("hello"))
+  })
 
   it("colorizes in blue", () => {
-    expect(colorize("hello", "blue")).toBe(ansis.blue("hello"));
-  });
-});
+    expect(colorize("hello", "blue")).toBe(ansis.blue("hello"))
+  })
+})
 
-function stubPrompts(answers: { language: string; color: string; name: string }): Prompts {
-  const selectAnswers = [answers.language, answers.color];
-  let selectCall = 0;
+describe("demoCommand", () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    mockConfig()
+    vi.mocked(p.isCancel).mockReturnValue(false)
+  })
 
-  return {
-    intro: vi.fn(),
-    outro: vi.fn(),
-    cancel: vi.fn(),
-    select: vi.fn(async () => selectAnswers[selectCall++]) as Prompts["select"],
-    text: vi.fn(async () => answers.name) as Prompts["text"],
-    isCancel: ((_value: unknown): _value is symbol => false) as Prompts["isCancel"],
-  };
-}
-
-describe("run", () => {
   it("displays a french greeting in red", async () => {
-    const prompts = stubPrompts({ language: "french", color: "red", name: "Alice" });
+    vi.mocked(p.select)
+      .mockResolvedValueOnce("french")
+      .mockResolvedValueOnce("red")
+    vi.mocked(p.text).mockResolvedValueOnce("Alice")
 
-    await run(prompts);
+    await demoCommand.callback!({ _: { firstName: "World" } })
 
-    expect(prompts.intro).toHaveBeenCalledWith("Welcome to the greeting demo!");
-    expect(prompts.outro).toHaveBeenCalledWith(ansis.red("Bonjour Alice"));
-  });
+    expect(p.intro).toHaveBeenCalledWith("Welcome to the greeting demo!")
+    expect(p.outro).toHaveBeenNthCalledWith(1, ansis.red("Bonjour Alice"))
+    expect(p.outro).toHaveBeenNthCalledWith(2, ansis.red("Bonjour World"))
+  })
 
   it("displays an english greeting in blue", async () => {
-    const prompts = stubPrompts({ language: "english", color: "blue", name: "Bob" });
+    vi.mocked(p.select)
+      .mockResolvedValueOnce("english")
+      .mockResolvedValueOnce("blue")
+    vi.mocked(p.text).mockResolvedValueOnce("Bob")
 
-    await run(prompts);
+    await demoCommand.callback!({ _: { firstName: "Bob" } })
 
-    expect(prompts.outro).toHaveBeenCalledWith(ansis.blue("Hello Bob"));
-  });
+    expect(p.outro).toHaveBeenCalledWith(ansis.blue("Hello Bob"))
+  })
+
+  it("outputs the config extend value", async () => {
+    mockConfig({ extend: true })
+    vi.mocked(p.select)
+      .mockResolvedValueOnce("english")
+      .mockResolvedValueOnce("blue")
+    vi.mocked(p.text).mockResolvedValueOnce("Alice")
+
+    await demoCommand.callback!({ _: { firstName: "Alice" } })
+
+    expect(p.log.info).toHaveBeenCalledWith("Config: extend = true")
+  })
 
   it("exits on cancel during language selection", async () => {
-    const cancelSymbol = Symbol("cancel");
-    const prompts = stubPrompts({ language: "english", color: "red", name: "Alice" });
-    prompts.select = vi.fn(async () => cancelSymbol);
-    prompts.isCancel = (value): value is symbol => value === cancelSymbol;
+    const cancelSymbol = Symbol("cancel")
+    vi.mocked(p.select).mockResolvedValueOnce(cancelSymbol)
+    vi.mocked(p.isCancel).mockReturnValueOnce(true)
 
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation(() => undefined as never)
 
-    await run(prompts);
+    await demoCommand.callback!({ _: { firstName: "Alice" } })
 
-    expect(prompts.cancel).toHaveBeenCalledWith("Cancelled.");
-    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(p.cancel).toHaveBeenCalledWith("Cancelled.")
+    expect(exitSpy).toHaveBeenCalledWith(0)
 
-    exitSpy.mockRestore();
-  });
-});
+    exitSpy.mockRestore()
+  })
+})
