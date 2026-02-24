@@ -76,3 +76,13 @@ vi.mocked(cli.abort).mockImplementation(() => { throw new Error("abort") })
 
 **Fixtures** in `test/fixtures/` are real files on disk. Prefer them over mocking `fs` or creating tmp directories.
 
+## Devlogs
+
+After finishing a feature or implementing a plan, create a devlog entry:
+
+```bash
+npx tsx /home/lud/src/mcm/src/main.ts next devlogs "title of the change"
+```
+
+This prints the path for the next devlog file. Create that file with a short summary of what was changed and why.
+
