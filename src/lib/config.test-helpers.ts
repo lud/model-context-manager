@@ -5,6 +5,7 @@ import type { Config } from "./config.js"
 export function mockConfig(overrides: Partial<Config> = {}): void {
   vi.spyOn(configModule, "getConfig").mockReturnValue({
     extend: false,
+    doctypes: {},
     ...overrides,
   })
 }

@@ -12,7 +12,8 @@
       "Bash(git -C /home/lud/src/mcm log --oneline -20)",
       "Bash(npm run typecheck:*)",
       "Bash(npm test:*)",
-      "Bash(npm uninstall:*)"
+      "Bash(npm uninstall:*)",
+      "Bash(npm run test:*)"
     ]
   }
 }
