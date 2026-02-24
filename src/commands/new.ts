@@ -40,3 +40,15 @@ export const newCommand = command(
     cli.writeln(toDisplayPath(fullPath, process.cwd()))
   },
 )
+
+/**
+ * Create a new file in a doctype directory. The filename is generated
+ * from the title and the doctype's sequencing rules.
+ *
+ * ## Examples
+ *
+ * ```sh
+ * mcm new devlogs "Add authentication"
+ * ```
+ */
+export function commentDoc() {}

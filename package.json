@@ -17,8 +17,10 @@
   },
   "devDependencies": {
     "@types/node": "^25.2.3",
+    "ts-morph": "^27.0.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "yaml": "^2.8.2"
   }
 }

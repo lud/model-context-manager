@@ -12,3 +12,15 @@ export const whichCommand = command(
     cli.writeln(config.configFile)
   },
 )
+
+/**
+ * Print the absolute path to the `.mcm.json` config file that MCM
+ * resolved from the current working directory.
+ *
+ * ## Examples
+ *
+ * ```sh
+ * mcm which
+ * ```
+ */
+export function commentDoc() {}

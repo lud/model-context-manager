@@ -11,6 +11,8 @@ demo:
 schema:
   npx tsx tools/build-json-schema.ts
 
+site:
+  npx tsx tools/build-site.ts
 
 test:
   npm run test
@@ -18,4 +20,4 @@ test:
 _git_status:
   git status
 
-check: test schema typecheck format _git_status
+check: test schema site typecheck format _git_status

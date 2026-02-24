@@ -37,3 +37,16 @@ export const nextCommand = command(
     cli.writeln(toDisplayPath(join(entry.dir, filename), process.cwd()))
   },
 )
+
+/**
+ * Print the next filename that would be created for a doctype,
+ * without actually creating the file.
+ *
+ * ## Examples
+ *
+ * ```sh
+ * mcm next devlogs "My title"
+ * mcm next devlogs
+ * ```
+ */
+export function commentDoc() {}

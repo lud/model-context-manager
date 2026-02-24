@@ -1,2 +1,5 @@
 node_modules/
 dist/
+site/commands/
+site/assets/
+site/index.json

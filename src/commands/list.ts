@@ -47,3 +47,18 @@ export function listDoctypeFiles(
     cli.writeln(toDisplayPath(join(entry.dir, file), process.cwd()))
   }
 }
+
+/**
+ * List all configured doctypes or the files within a specific doctype.
+ *
+ * ## Examples
+ *
+ * ```sh
+ * # List all doctypes
+ * mcm list
+ *
+ * # List files in a doctype
+ * mcm list devlogs
+ * ```
+ */
+export function commentDoc() {}
