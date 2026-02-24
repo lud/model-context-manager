@@ -10,10 +10,7 @@ export function formatDatetime(date: Date): string {
   return `${y}${m}${d}${h}${min}${s}`
 }
 
-export function parseMaxSequence(
-  files: string[],
-  separator: string,
-): number {
+export function parseMaxSequence(files: string[], separator: string): number {
   let max = 0
   for (const file of files) {
     const idx = file.indexOf(separator)

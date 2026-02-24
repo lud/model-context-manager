@@ -1,11 +1,23 @@
-import { cli } from "cleye"
+import { cli as cleyeCLI } from "cleye"
 import { demoCommand } from "./commands/demo.js"
 import { listCommand } from "./commands/list.js"
 import { newCommand } from "./commands/new.js"
 import { nextCommand } from "./commands/next.js"
+import { whichCommand } from "./commands/which.js"
+import { abortError } from "./lib/cli.js"
 
-cli({
+const argv = cleyeCLI({
   name: "mcm",
   version: "0.1.0",
-  commands: [demoCommand, listCommand, newCommand, nextCommand],
+  commands: [demoCommand, listCommand, newCommand, nextCommand, whichCommand],
+  strictFlags: true,
 })
+
+// console.log(`coucou`, 123)
+
+// if (argv.command === undefined) {
+//   argv.showHelp()
+//   if (argv._[0]) {
+//     abortError(`Unknown command ${argv._[0]}`)
+//   }
+// }

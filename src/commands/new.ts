@@ -8,7 +8,11 @@ import { nextFilename } from "../lib/sequence.js"
 import { slugify } from "../lib/slugify.js"
 
 export const newCommand = command(
-  { name: "new", parameters: ["<doctype>", "<title...>"] },
+  {
+    name: "new",
+    parameters: ["<doctype>", "<title...>"],
+    help: { description: "Create a new file in a doctype" },
+  },
   (argv) => {
     const config = getConfig()
     const doctype = argv._.doctype

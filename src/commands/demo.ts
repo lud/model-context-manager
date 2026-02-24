@@ -9,6 +9,7 @@ export type Color = "red" | "blue"
 export const demoCommand = command(
   {
     name: "demo",
+    help: { description: "Interactive demo of prompts and styled output" },
     parameters: ["<first name>"],
     flags: {
       port: {

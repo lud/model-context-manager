@@ -35,34 +35,60 @@ describe("parseMaxSequence", () => {
 
 describe("nextFilename", () => {
   it("returns slug.md for 'none' scheme", () => {
-    const doctype = { dir: "/tmp", sequenceScheme: "none" as const, sequenceSeparator: "." }
+    const doctype = {
+      dir: "/tmp",
+      sequenceScheme: "none" as const,
+      sequenceSeparator: ".",
+    }
     expect(nextFilename([], doctype, "my-note")).toBe("my-note.md")
   })
 
   it("returns counter-prefixed filename for numeric scheme", () => {
     const files = readdirSync(join(fixtureDir, "counter-three-digit"))
-    const doctype = { dir: "/tmp", sequenceScheme: "000", sequenceSeparator: "." }
+    const doctype = {
+      dir: "/tmp",
+      sequenceScheme: "000",
+      sequenceSeparator: ".",
+    }
     expect(nextFilename(files, doctype, "new-note")).toBe("004.new-note.md")
   })
 
   it("pads to scheme length", () => {
-    const doctype = { dir: "/tmp", sequenceScheme: "0000", sequenceSeparator: "." }
+    const doctype = {
+      dir: "/tmp",
+      sequenceScheme: "0000",
+      sequenceSeparator: ".",
+    }
     expect(nextFilename(["0001.old.md"], doctype, "new")).toBe("0002.new.md")
   })
 
   it("starts at 001 for empty dir with numeric scheme", () => {
-    const doctype = { dir: "/tmp", sequenceScheme: "000", sequenceSeparator: "." }
+    const doctype = {
+      dir: "/tmp",
+      sequenceScheme: "000",
+      sequenceSeparator: ".",
+    }
     expect(nextFilename([], doctype, "first")).toBe("001.first.md")
   })
 
   it("uses custom separator", () => {
     const files = readdirSync(join(fixtureDir, "counter-custom-sep"))
-    const doctype = { dir: "/tmp", sequenceScheme: "000", sequenceSeparator: " - " }
-    expect(nextFilename(files, doctype, "third-note")).toBe("003 - third-note.md")
+    const doctype = {
+      dir: "/tmp",
+      sequenceScheme: "000",
+      sequenceSeparator: " - ",
+    }
+    expect(nextFilename(files, doctype, "third-note")).toBe(
+      "003 - third-note.md",
+    )
   })
 
   it("returns datetime-prefixed filename for datetime scheme", () => {
-    const doctype = { dir: "/tmp", sequenceScheme: "datetime" as const, sequenceSeparator: "." }
+    const doctype = {
+      dir: "/tmp",
+      sequenceScheme: "datetime" as const,
+      sequenceSeparator: ".",
+    }
     const result = nextFilename([], doctype, "my-note")
     expect(result).toMatch(/^\d{14}\.my-note\.md$/)
   })

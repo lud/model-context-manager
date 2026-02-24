@@ -8,7 +8,11 @@ import { nextFilename } from "../lib/sequence.js"
 import { slugify } from "../lib/slugify.js"
 
 export const nextCommand = command(
-  { name: "next", parameters: ["<doctype>", "[title...]"] },
+  {
+    name: "next",
+    parameters: ["<doctype>", "[title...]"],
+    help: { description: "Print the next filename for a doctype" },
+  },
   (argv) => {
     const config = getConfig()
     const doctype = argv._.doctype
@@ -19,9 +23,8 @@ export const nextCommand = command(
       cli.abortError(`Unknown doctype: ${doctype}`)
     }
 
-    const slug = titleWords.length > 0
-      ? slugify(titleWords.join(" "))
-      : "title-of-doc"
+    const slug =
+      titleWords.length > 0 ? slugify(titleWords.join(" ")) : "title-of-doc"
 
     let files: string[] = []
     try {

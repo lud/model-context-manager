@@ -1,9 +1,17 @@
-import { afterAll, describe, expect, it } from "vitest"
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest"
 import { ZodError } from "zod"
-import { loadConfigOrFail, locateConfigFile, parseConfig } from "./config.js"
-import { join } from "node:path"
+import {
+  loadConfigOrFail,
+  getConfig,
+  locateConfigFile,
+  parseConfig,
+} from "./config.js"
+import { join, resolve } from "node:path"
 import { mkdtempSync, mkdirSync, chmodSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
+import * as cli from "./cli.js"
+
+vi.mock("./cli.js")
 
 const fixtures = join(
   import.meta.dirname,
@@ -42,10 +50,23 @@ describe("parseConfig", () => {
     })
   })
 
+  it("strips $schema property from output", () => {
+    expect(
+      parseConfig({ $schema: "./resources/mcm-config.schema.json" }),
+    ).toEqual({
+      extend: false,
+      doctypes: {},
+    })
+  })
+
   it("accepts a valid doctype entry", () => {
     const result = parseConfig({ doctypes: { notes: { dir: "/some/path" } } })
     expect(result.doctypes).toEqual({
-      notes: { dir: "/some/path", sequenceScheme: "000", sequenceSeparator: "." },
+      notes: {
+        dir: "/some/path",
+        sequenceScheme: "000",
+        sequenceSeparator: ".",
+      },
     })
   })
 
@@ -204,5 +225,32 @@ describe("loadConfigOrFail", () => {
       join(docFixtures, "no-doctypes", ".mcm.json"),
     )
     expect(config.doctypes).toEqual({})
+  })
+
+  it("includes configFile and configDir in returned object", () => {
+    const filePath = join(docFixtures, "relative-dir", ".mcm.json")
+    const config = loadConfigOrFail(filePath)
+    expect(config.configFile).toBe(resolve(filePath))
+    expect(config.configDir).toBe(resolve(join(docFixtures, "relative-dir")))
+  })
+})
+
+describe("getConfig", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("aborts when no config file is found", () => {
+    vi.mocked(cli.abortError).mockImplementation(() => {
+      throw new Error("abortError")
+    })
+    vi.spyOn(process, "cwd").mockReturnValue(
+      join(fixtures, "without-config", "nested", "deeply"),
+    )
+
+    expect(() => getConfig()).toThrow("abortError")
+    expect(cli.abortError).toHaveBeenCalledWith(
+      "Could not find .mcm.json configuration file",
+    )
   })
 })

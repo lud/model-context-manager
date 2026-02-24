@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "extend": {
+      "default": false,
+      "description": "Reserved for future use. When true, this config will extend a parent config.",
+      "type": "boolean"
+    },
+    "doctypes": {
+      "default": {},
+      "description": "Map of doctype names to their configuration.",
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$",
+        "description": "Doctype name. Only letters, digits, dots, hyphens, and underscores are allowed."
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "dir": {
+            "type": "string",
+            "description": "Directory where files of this doctype are stored. Relative paths are resolved from the config file location."
+          },
+          "sequenceScheme": {
+            "default": "000",
+            "description": "How filenames are sequenced. \"none\" disables sequencing. \"datetime\" uses a YYYYMMDDHHmmss timestamp. A string of zeroes (e.g. \"000\") zero-pads to that width.",
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "datetime"
+                ]
+              },
+              {
+                "type": "string",
+                "pattern": "^0+$"
+              }
+            ]
+          },
+          "sequenceSeparator": {
+            "default": ".",
+            "description": "Separator between the sequence number and the slug in generated filenames.",
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^\\\\/\\x00]+$"
+          }
+        },
+        "required": [
+          "dir"
+        ],
+        "description": "Configuration for a single doctype."
+      }
+    }
+  },
+  "description": "MCM configuration file."
+}

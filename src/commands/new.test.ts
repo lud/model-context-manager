@@ -35,7 +35,9 @@ describe("newCommand", () => {
       },
     })
 
-    newCommand.callback!({ _: { doctype: "notes", title: ["My", "First", "Note"] } })
+    newCommand.callback!({
+      _: { doctype: "notes", title: ["My", "First", "Note"] },
+    })
 
     expect(cli.writeln).toHaveBeenCalledWith(
       expect.stringContaining("001.my-first-note.md"),

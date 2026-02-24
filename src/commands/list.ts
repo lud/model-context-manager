@@ -7,7 +7,11 @@ import type { Config } from "../lib/config.js"
 import { toDisplayPath } from "../lib/paths.js"
 
 export const listCommand = command(
-  { name: "list", parameters: ["[doctype]"] },
+  {
+    name: "list",
+    parameters: ["[doctype]"],
+    help: { description: "List doctypes or files in a doctype" },
+  },
   (argv) => {
     const config = getConfig()
     const doctype = argv._.doctype
