@@ -1,4 +1,12 @@
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest"
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 import { ZodError } from "zod"
 import {
   loadConfigOrFail,
@@ -7,17 +15,26 @@ import {
   parseConfig,
 } from "./config.js"
 import { join, resolve } from "node:path"
-import { mkdtempSync, mkdirSync, chmodSync, rmSync } from "node:fs"
+import { cpSync, mkdtempSync, mkdirSync, chmodSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import * as cli from "./cli.js"
 
 vi.mock("./cli.js")
 
-const fixtures = join(
+// Copy config-lookup fixtures to /tmp so locateConfigFile walk-up
+// doesn't find the project's own .mcm.json
+const workspace = mkdtempSync(join(tmpdir(), "mcm-test-config-"))
+const srcFixtures = join(
   import.meta.dirname,
   "../../test/fixtures",
   "config-lookup",
 )
+cpSync(srcFixtures, join(workspace, "config-lookup"), { recursive: true })
+const fixtures = join(workspace, "config-lookup")
+
+afterAll(() => {
+  rmSync(workspace, { recursive: true, force: true })
+})
 
 describe("parseConfig", () => {
   it("returns default config for empty object", () => {
@@ -182,22 +199,18 @@ describe("locateConfigFile", () => {
   })
 
   const isRoot = process.getuid?.() === 0
-  const tmp = !isRoot ? mkdtempSync(join(tmpdir(), "mcm-test-")) : null
-
-  afterAll(() => {
-    if (tmp) {
-      chmodSync(join(tmp, "no-access"), 0o755)
-      rmSync(tmp, { recursive: true })
-    }
-  })
 
   it.skipIf(isRoot)("returns null on permission error", () => {
-    const noAccess = join(tmp!, "no-access")
+    const noAccess = join(workspace, "no-access")
     const child = join(noAccess, "child")
     mkdirSync(child, { recursive: true })
     chmodSync(noAccess, 0o000)
 
-    expect(locateConfigFile(child)).toBeNull()
+    try {
+      expect(locateConfigFile(child)).toBeNull()
+    } finally {
+      chmodSync(noAccess, 0o755)
+    }
   })
 })
 

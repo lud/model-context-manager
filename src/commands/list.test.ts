@@ -30,7 +30,13 @@ describe("listAllDoctypes", () => {
   })
 
   it("prints each doctype with its display path", () => {
-    const doctypes = { notes: { dir: "/absolute/docs" } }
+    const doctypes = {
+      notes: {
+        dir: "/absolute/docs",
+        sequenceScheme: "000",
+        sequenceSeparator: ".",
+      },
+    }
     listAllDoctypes(doctypes)
     expect(cli.writeln).toHaveBeenCalledWith("notes: /absolute/docs")
   })
@@ -38,7 +44,13 @@ describe("listAllDoctypes", () => {
 
 describe("listDoctypeFiles", () => {
   it("lists files in sorted order", () => {
-    const doctypes = { notes: { dir: join(listFilesFixture, "notes") } }
+    const doctypes = {
+      notes: {
+        dir: join(listFilesFixture, "notes"),
+        sequenceScheme: "000",
+        sequenceSeparator: ".",
+      },
+    }
     listDoctypeFiles(doctypes, "notes")
 
     const calls = vi.mocked(cli.writeln).mock.calls.map((c) => c[0])
@@ -63,7 +75,15 @@ describe("listCommand integration", () => {
 
   it("routes to listDoctypeFiles when doctype arg given", () => {
     const notesDir = join(listFilesFixture, "notes")
-    mockConfig({ doctypes: { notes: { dir: notesDir } } })
+    mockConfig({
+      doctypes: {
+        notes: {
+          dir: notesDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+        },
+      },
+    })
 
     listCommand.callback!({ _: { doctype: "notes" } })
 
