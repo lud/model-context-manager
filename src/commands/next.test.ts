@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { join } from "node:path"
 import * as cli from "../lib/cli.js"
 import { nextCommand } from "./next.js"
-import { mockConfig } from "../lib/config.test-helpers.js"
+import { mockProject } from "../lib/project.test-helpers.js"
 
 vi.mock("../lib/cli.js")
-vi.mock("../lib/config.js")
+vi.mock("../lib/project.js")
 
 const fixtureDir = join(import.meta.dirname, "../../test/fixtures/sequence")
 
@@ -21,7 +21,7 @@ afterEach(() => {
 
 describe("nextCommand", () => {
   it("outputs next filename with counter scheme", () => {
-    mockConfig({
+    mockProject({
       doctypes: {
         notes: {
           dir: join(fixtureDir, "counter-three-digit"),
@@ -39,7 +39,7 @@ describe("nextCommand", () => {
   })
 
   it("uses default slug when no title given", () => {
-    mockConfig({
+    mockProject({
       doctypes: {
         notes: {
           dir: join(fixtureDir, "empty"),
@@ -57,7 +57,7 @@ describe("nextCommand", () => {
   })
 
   it("handles undefined title (no args)", () => {
-    mockConfig({
+    mockProject({
       doctypes: {
         notes: {
           dir: join(fixtureDir, "empty"),
@@ -75,7 +75,7 @@ describe("nextCommand", () => {
   })
 
   it("aborts for unknown doctype", () => {
-    mockConfig({ doctypes: {} })
+    mockProject({ doctypes: {} })
 
     expect(() =>
       nextCommand.callback!({ _: { doctype: "unknown", title: [] } }),
@@ -85,7 +85,7 @@ describe("nextCommand", () => {
   })
 
   it("treats missing directory as empty", () => {
-    mockConfig({
+    mockProject({
       doctypes: {
         notes: {
           dir: "/nonexistent/path",
@@ -103,7 +103,7 @@ describe("nextCommand", () => {
   })
 
   it("works with custom separator", () => {
-    mockConfig({
+    mockProject({
       doctypes: {
         notes: {
           dir: join(fixtureDir, "counter-custom-sep"),

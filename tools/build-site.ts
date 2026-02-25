@@ -18,9 +18,9 @@ const SITE_DIR = join(ROOT, "site")
 const SITE_COMMANDS = join(SITE_DIR, "commands")
 const SITE_PAGES = join(SITE_DIR, "pages")
 const SITE_ASSETS = join(SITE_DIR, "assets")
-const SCHEMA_SRC = join(ROOT, "resources/mcm-config.schema.json")
+const SCHEMA_SRC = join(ROOT, "resources/mcm-project.schema.json")
 
-const COMMAND_ORDER = ["list", "new", "next"]
+const COMMAND_ORDER = ["list", "new", "next", "which"]
 const IGNORE_COMMANDS = ["demo"]
 const PAGE_ORDER: string[] = []
 
@@ -201,7 +201,7 @@ console.log("  index.json")
 
 // --- Copy schema ---
 
-copyFileSync(SCHEMA_SRC, join(SITE_ASSETS, "mcm-config.schema.json"))
-console.log("  assets/mcm-config.schema.json")
+copyFileSync(SCHEMA_SRC, join(SITE_ASSETS, "mcm-project.schema.json"))
+console.log("  assets/mcm-project.schema.json")
 
 console.log(`\nSite built successfully.`)

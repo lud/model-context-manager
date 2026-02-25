@@ -2,8 +2,8 @@ import { command } from "cleye"
 import { readdirSync } from "node:fs"
 import { join } from "node:path"
 import * as cli from "../lib/cli.js"
-import { getConfig } from "../lib/config.js"
-import type { Config } from "../lib/config.js"
+import { getProject } from "../lib/project.js"
+import type { Project } from "../lib/project.js"
 import { toDisplayPath } from "../lib/paths.js"
 
 export const listCommand = command(
@@ -13,17 +13,17 @@ export const listCommand = command(
     help: { description: "List doctypes or files in a doctype" },
   },
   (argv) => {
-    const config = getConfig()
+    const project = getProject()
     const doctype = argv._.doctype
     if (doctype === undefined) {
-      listAllDoctypes(config.doctypes)
+      listAllDoctypes(project.doctypes)
     } else {
-      listDoctypeFiles(config.doctypes, doctype)
+      listDoctypeFiles(project.doctypes, doctype)
     }
   },
 )
 
-export function listAllDoctypes(doctypes: Config["doctypes"]): void {
+export function listAllDoctypes(doctypes: Project["doctypes"]): void {
   const entries = Object.entries(doctypes)
   if (entries.length === 0) {
     cli.warning("No doctypes configured.")
@@ -35,7 +35,7 @@ export function listAllDoctypes(doctypes: Config["doctypes"]): void {
 }
 
 export function listDoctypeFiles(
-  doctypes: Config["doctypes"],
+  doctypes: Project["doctypes"],
   doctype: string,
 ): void {
   const entry = doctypes[doctype]

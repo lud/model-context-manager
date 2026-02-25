@@ -39,7 +39,7 @@ const DoctypeValueSchema = z
   })
   .describe("Configuration for a single doctype.")
 
-export const ConfigSchema = z
+export const ProjectSchema = z
   .object({
     extend: z
       .boolean()
@@ -54,40 +54,43 @@ export const ConfigSchema = z
   })
   .describe("MCM configuration file.")
 
-export type Config = z.infer<typeof ConfigSchema>
-export type DoctypeConfig = z.infer<typeof DoctypeValueSchema>
-export type ResolvedConfig = Config & { configFile: string; configDir: string }
-
-export function parseConfig(raw: unknown): Config {
-  return ConfigSchema.parse(raw)
+export type Project = z.infer<typeof ProjectSchema>
+export type DoctypeEntry = z.infer<typeof DoctypeValueSchema>
+export type ResolvedProject = Project & {
+  projectFile: string
+  projectDir: string
 }
 
-export function loadConfigOrFail(filePath: string): ResolvedConfig {
+export function parseProject(raw: unknown): Project {
+  return ProjectSchema.parse(raw)
+}
+
+export function loadProjectOrFail(filePath: string): ResolvedProject {
   const content = readFileSync(filePath, "utf-8")
   const raw = JSON.parse(content)
-  const config = parseConfig(raw)
+  const project = parseProject(raw)
 
-  const configFile = resolve(filePath)
-  const configDir = dirname(configFile)
-  const resolvedDoctypes: Config["doctypes"] = {}
-  for (const [key, value] of Object.entries(config.doctypes)) {
+  const projectFile = resolve(filePath)
+  const projectDir = dirname(projectFile)
+  const resolvedDoctypes: Project["doctypes"] = {}
+  for (const [key, value] of Object.entries(project.doctypes)) {
     resolvedDoctypes[key] = {
       ...value,
-      dir: isAbsolute(value.dir) ? value.dir : join(configDir, value.dir),
+      dir: isAbsolute(value.dir) ? value.dir : join(projectDir, value.dir),
     }
   }
-  return { ...config, configFile, configDir, doctypes: resolvedDoctypes }
+  return { ...project, projectFile, projectDir, doctypes: resolvedDoctypes }
 }
 
-export function getConfig(): ResolvedConfig {
-  const configPath = locateConfigFile(process.cwd())
-  if (!configPath) {
+export function getProject(): ResolvedProject {
+  const projectPath = locateProjectFile(process.cwd())
+  if (!projectPath) {
     abortError("Could not find .mcm.json configuration file")
   }
-  return loadConfigOrFail(configPath)
+  return loadProjectOrFail(projectPath)
 }
 
-export function locateConfigFile(cwd: string): string | null {
+export function locateProjectFile(cwd: string): string | null {
   let dir = resolve(cwd)
 
   for (;;) {

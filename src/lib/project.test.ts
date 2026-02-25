@@ -1,19 +1,11 @@
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest"
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest"
 import { ZodError } from "zod"
 import {
-  loadConfigOrFail,
-  getConfig,
-  locateConfigFile,
-  parseConfig,
-} from "./config.js"
+  loadProjectOrFail,
+  getProject,
+  locateProjectFile,
+  parseProject,
+} from "./project.js"
 import { join, resolve } from "node:path"
 import { cpSync, mkdtempSync, mkdirSync, chmodSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -21,47 +13,47 @@ import * as cli from "./cli.js"
 
 vi.mock("./cli.js")
 
-// Copy config-lookup fixtures to /tmp so locateConfigFile walk-up
+// Copy project-lookup fixtures to /tmp so locateProjectFile walk-up
 // doesn't find the project's own .mcm.json
-const workspace = mkdtempSync(join(tmpdir(), "mcm-test-config-"))
+const workspace = mkdtempSync(join(tmpdir(), "mcm-test-project-"))
 const srcFixtures = join(
   import.meta.dirname,
   "../../test/fixtures",
-  "config-lookup",
+  "project-lookup",
 )
-cpSync(srcFixtures, join(workspace, "config-lookup"), { recursive: true })
-const fixtures = join(workspace, "config-lookup")
+cpSync(srcFixtures, join(workspace, "project-lookup"), { recursive: true })
+const fixtures = join(workspace, "project-lookup")
 
 afterAll(() => {
   rmSync(workspace, { recursive: true, force: true })
 })
 
-describe("parseConfig", () => {
-  it("returns default config for empty object", () => {
-    expect(parseConfig({})).toEqual({ extend: false, doctypes: {} })
+describe("parseProject", () => {
+  it("returns default project for empty object", () => {
+    expect(parseProject({})).toEqual({ extend: false, doctypes: {} })
   })
 
   it("respects extend: true when provided", () => {
-    expect(parseConfig({ extend: true })).toEqual({
+    expect(parseProject({ extend: true })).toEqual({
       extend: true,
       doctypes: {},
     })
   })
 
   it("throws ZodError when extend is wrong type", () => {
-    expect(() => parseConfig({ extend: "yes" })).toThrow(ZodError)
+    expect(() => parseProject({ extend: "yes" })).toThrow(ZodError)
   })
 
   it("throws ZodError when passed null", () => {
-    expect(() => parseConfig(null)).toThrow(ZodError)
+    expect(() => parseProject(null)).toThrow(ZodError)
   })
 
   it("throws ZodError when passed a non-object", () => {
-    expect(() => parseConfig(42)).toThrow(ZodError)
+    expect(() => parseProject(42)).toThrow(ZodError)
   })
 
   it("strips unknown fields from output", () => {
-    expect(parseConfig({ extend: false, unknown: "field" })).toEqual({
+    expect(parseProject({ extend: false, unknown: "field" })).toEqual({
       extend: false,
       doctypes: {},
     })
@@ -69,7 +61,7 @@ describe("parseConfig", () => {
 
   it("strips $schema property from output", () => {
     expect(
-      parseConfig({ $schema: "./resources/mcm-config.schema.json" }),
+      parseProject({ $schema: "./resources/mcm-project.schema.json" }),
     ).toEqual({
       extend: false,
       doctypes: {},
@@ -77,7 +69,7 @@ describe("parseConfig", () => {
   })
 
   it("accepts a valid doctype entry", () => {
-    const result = parseConfig({ doctypes: { notes: { dir: "/some/path" } } })
+    const result = parseProject({ doctypes: { notes: { dir: "/some/path" } } })
     expect(result.doctypes).toEqual({
       notes: {
         dir: "/some/path",
@@ -89,28 +81,28 @@ describe("parseConfig", () => {
 
   it("throws ZodError for doctype key with invalid character (space)", () => {
     expect(() =>
-      parseConfig({ doctypes: { "my notes": { dir: "/path" } } }),
+      parseProject({ doctypes: { "my notes": { dir: "/path" } } }),
     ).toThrow(ZodError)
   })
 
   it("throws ZodError for doctype key with invalid character (!)", () => {
     expect(() =>
-      parseConfig({ doctypes: { "bad!key": { dir: "/path" } } }),
+      parseProject({ doctypes: { "bad!key": { dir: "/path" } } }),
     ).toThrow(ZodError)
   })
 
   it("throws ZodError when doctype value is missing dir", () => {
-    expect(() => parseConfig({ doctypes: { notes: {} } })).toThrow(ZodError)
+    expect(() => parseProject({ doctypes: { notes: {} } })).toThrow(ZodError)
   })
 
   it("throws ZodError when doctype dir is wrong type", () => {
-    expect(() => parseConfig({ doctypes: { notes: { dir: 42 } } })).toThrow(
+    expect(() => parseProject({ doctypes: { notes: { dir: 42 } } })).toThrow(
       ZodError,
     )
   })
 
   it("strips unknown fields inside doctype value", () => {
-    const result = parseConfig({
+    const result = parseProject({
       doctypes: { notes: { dir: "/path", extra: "ignored" } },
     })
     expect(result.doctypes.notes).toEqual({
@@ -121,20 +113,20 @@ describe("parseConfig", () => {
   })
 
   it("applies default sequenceScheme and sequenceSeparator when omitted", () => {
-    const result = parseConfig({ doctypes: { notes: { dir: "/path" } } })
+    const result = parseProject({ doctypes: { notes: { dir: "/path" } } })
     expect(result.doctypes.notes.sequenceScheme).toBe("000")
     expect(result.doctypes.notes.sequenceSeparator).toBe(".")
   })
 
   it("accepts sequenceScheme: 'none'", () => {
-    const result = parseConfig({
+    const result = parseProject({
       doctypes: { notes: { dir: "/path", sequenceScheme: "none" } },
     })
     expect(result.doctypes.notes.sequenceScheme).toBe("none")
   })
 
   it("accepts sequenceScheme: 'datetime'", () => {
-    const result = parseConfig({
+    const result = parseProject({
       doctypes: { notes: { dir: "/path", sequenceScheme: "datetime" } },
     })
     expect(result.doctypes.notes.sequenceScheme).toBe("datetime")
@@ -142,7 +134,7 @@ describe("parseConfig", () => {
 
   it("accepts zero-padded sequenceScheme strings", () => {
     for (const scheme of ["0", "00", "0000"]) {
-      const result = parseConfig({
+      const result = parseProject({
         doctypes: { notes: { dir: "/path", sequenceScheme: scheme } },
       })
       expect(result.doctypes.notes.sequenceScheme).toBe(scheme)
@@ -152,7 +144,7 @@ describe("parseConfig", () => {
   it("rejects invalid sequenceScheme values", () => {
     for (const scheme of ["abc", "123", "", "00x"]) {
       expect(() =>
-        parseConfig({
+        parseProject({
           doctypes: { notes: { dir: "/path", sequenceScheme: scheme } },
         }),
       ).toThrow(ZodError)
@@ -161,7 +153,7 @@ describe("parseConfig", () => {
 
   it("accepts custom sequenceSeparator values", () => {
     for (const sep of ["-", "_", " - "]) {
-      const result = parseConfig({
+      const result = parseProject({
         doctypes: { notes: { dir: "/path", sequenceSeparator: sep } },
       })
       expect(result.doctypes.notes.sequenceSeparator).toBe(sep)
@@ -171,7 +163,7 @@ describe("parseConfig", () => {
   it("rejects invalid sequenceSeparator values", () => {
     for (const sep of ["", "/"]) {
       expect(() =>
-        parseConfig({
+        parseProject({
           doctypes: { notes: { dir: "/path", sequenceSeparator: sep } },
         }),
       ).toThrow(ZodError)
@@ -179,23 +171,22 @@ describe("parseConfig", () => {
   })
 })
 
-describe("locateConfigFile", () => {
+describe("locateProjectFile", () => {
   it("finds .mcm.json in cwd", () => {
     const start = join(fixtures, "with-config")
-    console.log(`start`, start)
-    expect(locateConfigFile(start)).toBe(join(start, ".mcm.json"))
+    expect(locateProjectFile(start)).toBe(join(start, ".mcm.json"))
   })
 
   it("finds .mcm.json in ancestor directory", () => {
     const start = join(fixtures, "with-config", "nested", "deeply")
-    expect(locateConfigFile(start)).toBe(
+    expect(locateProjectFile(start)).toBe(
       join(fixtures, "with-config", ".mcm.json"),
     )
   })
 
   it("returns null when no config exists", () => {
     const start = join(fixtures, "without-config", "nested", "deeply")
-    expect(locateConfigFile(start)).toBeNull()
+    expect(locateProjectFile(start)).toBeNull()
   })
 
   const isRoot = process.getuid?.() === 0
@@ -207,53 +198,53 @@ describe("locateConfigFile", () => {
     chmodSync(noAccess, 0o000)
 
     try {
-      expect(locateConfigFile(child)).toBeNull()
+      expect(locateProjectFile(child)).toBeNull()
     } finally {
       chmodSync(noAccess, 0o755)
     }
   })
 })
 
-describe("loadConfigOrFail", () => {
+describe("loadProjectOrFail", () => {
   const docFixtures = join(import.meta.dirname, "../../test/fixtures/doctypes")
 
-  it("resolves relative dir relative to config file directory", () => {
-    const config = loadConfigOrFail(
+  it("resolves relative dir relative to project file directory", () => {
+    const project = loadProjectOrFail(
       join(docFixtures, "relative-dir", ".mcm.json"),
     )
-    expect(config.doctypes.notes.dir).toBe(
+    expect(project.doctypes.notes.dir).toBe(
       join(docFixtures, "relative-dir", "my-docs"),
     )
   })
 
   it("keeps absolute dir unchanged", () => {
-    const config = loadConfigOrFail(
+    const project = loadProjectOrFail(
       join(docFixtures, "absolute-dir", ".mcm.json"),
     )
-    expect(config.doctypes.notes.dir).toBe("/absolute/path")
+    expect(project.doctypes.notes.dir).toBe("/absolute/path")
   })
 
   it("returns empty doctypes when none configured", () => {
-    const config = loadConfigOrFail(
+    const project = loadProjectOrFail(
       join(docFixtures, "no-doctypes", ".mcm.json"),
     )
-    expect(config.doctypes).toEqual({})
+    expect(project.doctypes).toEqual({})
   })
 
-  it("includes configFile and configDir in returned object", () => {
+  it("includes projectFile and projectDir in returned object", () => {
     const filePath = join(docFixtures, "relative-dir", ".mcm.json")
-    const config = loadConfigOrFail(filePath)
-    expect(config.configFile).toBe(resolve(filePath))
-    expect(config.configDir).toBe(resolve(join(docFixtures, "relative-dir")))
+    const project = loadProjectOrFail(filePath)
+    expect(project.projectFile).toBe(resolve(filePath))
+    expect(project.projectDir).toBe(resolve(join(docFixtures, "relative-dir")))
   })
 })
 
-describe("getConfig", () => {
+describe("getProject", () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })
 
-  it("aborts when no config file is found", () => {
+  it("aborts when no project file is found", () => {
     vi.mocked(cli.abortError).mockImplementation(() => {
       throw new Error("abortError")
     })
@@ -261,7 +252,7 @@ describe("getConfig", () => {
       join(fixtures, "without-config", "nested", "deeply"),
     )
 
-    expect(() => getConfig()).toThrow("abortError")
+    expect(() => getProject()).toThrow("abortError")
     expect(cli.abortError).toHaveBeenCalledWith(
       "Could not find .mcm.json configuration file",
     )

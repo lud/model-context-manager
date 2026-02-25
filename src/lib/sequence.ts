@@ -1,4 +1,4 @@
-import type { DoctypeConfig } from "./config.js"
+import type { DoctypeEntry } from "./project.js"
 
 export function formatDatetime(date: Date): string {
   const y = date.getFullYear().toString()
@@ -24,7 +24,7 @@ export function parseMaxSequence(files: string[], separator: string): number {
 
 export function nextFilename(
   existingFiles: string[],
-  doctype: DoctypeConfig,
+  doctype: DoctypeEntry,
   slug: string,
 ): string {
   const scheme = doctype.sequenceScheme

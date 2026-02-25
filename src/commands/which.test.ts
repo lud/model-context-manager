@@ -1,18 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import * as cli from "../lib/cli.js"
 import { whichCommand } from "./which.js"
-import { mockConfig } from "../lib/config.test-helpers.js"
+import { mockProject } from "../lib/project.test-helpers.js"
 
 vi.mock("../lib/cli.js")
-vi.mock("../lib/config.js")
+vi.mock("../lib/project.js")
 
 afterEach(() => {
   vi.resetAllMocks()
 })
 
 describe("whichCommand", () => {
-  it("outputs the configFile path", () => {
-    mockConfig({ configFile: "/home/user/project/.mcm.json" })
+  it("outputs the projectFile path", () => {
+    mockProject({ projectFile: "/home/user/project/.mcm.json" })
 
     whichCommand.callback!({ _: {} })
 

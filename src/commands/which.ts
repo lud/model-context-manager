@@ -1,6 +1,6 @@
 import { command } from "cleye"
 import * as cli from "../lib/cli.js"
-import { getConfig } from "../lib/config.js"
+import { getProject } from "../lib/project.js"
 
 export const whichCommand = command(
   {
@@ -8,8 +8,8 @@ export const whichCommand = command(
     help: { description: "Print the path to the .mcm.json config file" },
   },
   () => {
-    const config = getConfig()
-    cli.writeln(config.configFile)
+    const project = getProject()
+    cli.writeln(project.projectFile)
   },
 )
 

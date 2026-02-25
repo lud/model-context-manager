@@ -4,10 +4,10 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import * as cli from "../lib/cli.js"
 import { newCommand } from "./new.js"
-import { mockConfig } from "../lib/config.test-helpers.js"
+import { mockProject } from "../lib/project.test-helpers.js"
 
 vi.mock("../lib/cli.js")
-vi.mock("../lib/config.js")
+vi.mock("../lib/project.js")
 
 let tempDir: string
 
@@ -25,7 +25,7 @@ afterEach(() => {
 
 describe("newCommand", () => {
   it("creates a file with markdown heading", () => {
-    mockConfig({
+    mockProject({
       doctypes: {
         notes: {
           dir: tempDir,
@@ -48,7 +48,7 @@ describe("newCommand", () => {
   })
 
   it("creates file with none scheme", () => {
-    mockConfig({
+    mockProject({
       doctypes: {
         notes: {
           dir: tempDir,
@@ -70,7 +70,7 @@ describe("newCommand", () => {
 
   it("aborts on file collision", () => {
     // Create first file
-    mockConfig({
+    mockProject({
       doctypes: {
         notes: {
           dir: tempDir,
@@ -93,7 +93,7 @@ describe("newCommand", () => {
   })
 
   it("aborts for unknown doctype", () => {
-    mockConfig({ doctypes: {} })
+    mockProject({ doctypes: {} })
 
     expect(() =>
       newCommand.callback!({ _: { doctype: "unknown", title: ["Test"] } }),
@@ -103,7 +103,7 @@ describe("newCommand", () => {
   })
 
   it("aborts when directory does not exist", () => {
-    mockConfig({
+    mockProject({
       doctypes: {
         notes: {
           dir: "/nonexistent/path",

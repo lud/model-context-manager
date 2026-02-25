@@ -2,7 +2,7 @@ import { command } from "cleye"
 import { readdirSync } from "node:fs"
 import { join } from "node:path"
 import * as cli from "../lib/cli.js"
-import { getConfig } from "../lib/config.js"
+import { getProject } from "../lib/project.js"
 import { toDisplayPath } from "../lib/paths.js"
 import { nextFilename } from "../lib/sequence.js"
 import { slugify } from "../lib/slugify.js"
@@ -14,11 +14,11 @@ export const nextCommand = command(
     help: { description: "Print the next filename for a doctype" },
   },
   (argv) => {
-    const config = getConfig()
+    const project = getProject()
     const doctype = argv._.doctype
     const titleWords: string[] = argv._.title ?? []
 
-    const entry = config.doctypes[doctype]
+    const entry = project.doctypes[doctype]
     if (!entry) {
       cli.abortError(`Unknown doctype: ${doctype}`)
     }

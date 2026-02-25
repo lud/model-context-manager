@@ -1,5 +1,5 @@
 {
-  "$schema": "./resources/mcm-config.schema.json",
+  "$schema": "./resources/mcm-project.schema.json",
   "doctypes": {
     "devlogs": {
       "dir": "context/devlogs"

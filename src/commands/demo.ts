@@ -1,7 +1,7 @@
 import { command } from "cleye"
 import * as p from "@clack/prompts"
 import ansis from "ansis"
-import { getConfig } from "../lib/config.js"
+import { getProject } from "../lib/project.js"
 
 export type Language = "english" | "french"
 export type Color = "red" | "blue"
@@ -20,10 +20,10 @@ export const demoCommand = command(
     },
   },
   async (argv) => {
-    const config = getConfig()
+    const project = getProject()
 
     p.intro("Welcome to the greeting demo!")
-    p.log.info(`Config: extend = ${config.extend}`)
+    p.log.info(`Config: extend = ${project.extend}`)
 
     const language = await p.select<Language>({
       message: "Pick a language",

@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { join } from "node:path"
 import * as cli from "../lib/cli.js"
 import { listAllDoctypes, listCommand, listDoctypeFiles } from "./list.js"
-import { mockConfig } from "../lib/config.test-helpers.js"
+import { mockProject } from "../lib/project.test-helpers.js"
 
 vi.mock("../lib/cli.js")
-vi.mock("../lib/config.js")
+vi.mock("../lib/project.js")
 
 const listFilesFixture = join(
   import.meta.dirname,
@@ -66,7 +66,7 @@ describe("listDoctypeFiles", () => {
 
 describe("listCommand integration", () => {
   it("routes to listAllDoctypes when no doctype arg given", () => {
-    mockConfig({ doctypes: {} })
+    mockProject({ doctypes: {} })
 
     listCommand.callback!({ _: { doctype: undefined } })
 
@@ -75,7 +75,7 @@ describe("listCommand integration", () => {
 
   it("routes to listDoctypeFiles when doctype arg given", () => {
     const notesDir = join(listFilesFixture, "notes")
-    mockConfig({
+    mockProject({
       doctypes: {
         notes: {
           dir: notesDir,

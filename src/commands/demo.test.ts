@@ -1,11 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import * as p from "@clack/prompts"
 import { greet, colorize, demoCommand } from "./demo.js"
-import { mockConfig } from "../lib/config.test-helpers.js"
+import { mockProject } from "../lib/project.test-helpers.js"
 import ansis from "ansis"
 
 vi.mock("@clack/prompts")
-vi.mock("../lib/config.js")
+vi.mock("../lib/project.js")
 
 describe("greet", () => {
   it("greets in english", () => {
@@ -30,7 +30,7 @@ describe("colorize", () => {
 describe("demoCommand", () => {
   beforeEach(() => {
     vi.resetAllMocks()
-    mockConfig()
+    mockProject()
     vi.mocked(p.isCancel).mockReturnValue(false)
   })
 
@@ -59,7 +59,7 @@ describe("demoCommand", () => {
   })
 
   it("outputs the config extend value", async () => {
-    mockConfig({ extend: true })
+    mockProject({ extend: true })
     vi.mocked(p.select)
       .mockResolvedValueOnce("english")
       .mockResolvedValueOnce("blue")

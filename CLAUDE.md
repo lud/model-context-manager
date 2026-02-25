@@ -10,8 +10,8 @@ src/
   commands/                 # One file per command (+ matching .test.ts)
   lib/
     cli.ts                  # Output helpers (writeln, warning, error, etc.)
-    config.ts               # Config loading and Zod schema
-    config.test-helpers.ts  # mockConfig() helper for tests
+    project.ts              # Project loading and Zod schema
+    project.test-helpers.ts # mockProject() helper for tests
 test/
   fixtures/                 # Real files used by tests — no tmp dirs, no mocking fs
 ```
@@ -40,11 +40,11 @@ Use these functions for all output in day-to-day commands:
 | `debug(text)`    | cyan text                                                          |
 | `success(text)`  | green text                                                         |
 
-## Config system (`src/lib/config.ts`)
+## Project system (`src/lib/project.ts`)
 
 - `.mcm.json` is located by walking up from CWD
-- `getConfig()` — for use inside command handlers; locates and loads the config automatically
-- `loadConfigOrFail(filePath)` — loads a specific file; resolves relative `dir` values in doctypes to absolute paths
+- `getProject()` — for use inside command handlers; locates and loads the project automatically
+- `loadProjectOrFail(filePath)` — loads a specific file; resolves relative `dir` values in doctypes to absolute paths
 - Schema is Zod-validated; unknown fields are stripped
 
 ## Testing
@@ -63,7 +63,7 @@ listAllDoctypes(doctypes)
 
 **Mocking:**
 
-- `vi.mock("../lib/config.js")` + `mockConfig()` from `config.test-helpers.ts` to inject config
+- `vi.mock("../lib/project.js")` + `mockProject()` from `project.test-helpers.ts` to inject project
 - `vi.mock("../lib/cli.js")` to capture output calls in day-to-day command tests
 - `vi.mock("@clack/prompts")` for interactive command tests
 
