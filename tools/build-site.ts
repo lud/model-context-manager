@@ -10,6 +10,7 @@ import {
 import { join } from "node:path"
 import { Project } from "ts-morph"
 import yaml from "yaml"
+import { abortError, warning } from "../src/lib/cli"
 
 const ROOT = join(import.meta.dirname, "..")
 const SRC_COMMANDS = join(ROOT, "src/commands")
@@ -19,7 +20,7 @@ const SITE_PAGES = join(SITE_DIR, "pages")
 const SITE_ASSETS = join(SITE_DIR, "assets")
 const SCHEMA_SRC = join(ROOT, "resources/mcm-config.schema.json")
 
-const COMMAND_ORDER = ["list", "new", "next", "which"]
+const COMMAND_ORDER = ["list", "new", "next"]
 const IGNORE_COMMANDS = ["demo"]
 const PAGE_ORDER: string[] = []
 
@@ -61,19 +62,19 @@ const orderedCommands: string[] = []
 
 for (const name of COMMAND_ORDER) {
   if (!discoveredSet.has(name)) {
-    console.error(
+    abortError(
       `Error: ordered command "${name}" has no matching file in src/commands/`,
     )
-    process.exit(1)
   }
   orderedCommands.push(name)
 }
 
 for (const name of commandFiles) {
   if (!COMMAND_ORDER.includes(name) && !IGNORE_COMMANDS.includes(name)) {
-    console.warn(
+    warning(
       `Warning: discovered command "${name}" not in COMMAND_ORDER, appending`,
     )
+
     orderedCommands.push(name)
   }
 }
@@ -112,8 +113,7 @@ for (const name of orderedCommands) {
   )
 
   if (!commandExport) {
-    console.error(`Error: no *Command export found in ${name}.ts`)
-    process.exit(1)
+    abortError(`Error: no *Command export found in ${name}.ts`)
   }
 
   const cmd = commandExport[1] as {
@@ -164,19 +164,16 @@ if (existsSync(SITE_PAGES)) {
 
   for (const name of PAGE_ORDER) {
     if (!discoveredPages.has(name)) {
-      console.error(
+      abortError(
         `Error: ordered page "${name}" has no matching file in site/pages/`,
       )
-      process.exit(1)
     }
     orderedPages.push(name)
   }
 
   for (const name of pageFiles) {
     if (!PAGE_ORDER.includes(name)) {
-      console.warn(
-        `Warning: discovered page "${name}" not in PAGE_ORDER, appending`,
-      )
+      warning(`Warning: discovered page "${name}" not in PAGE_ORDER, appending`)
       orderedPages.push(name)
     }
   }
@@ -190,7 +187,7 @@ if (existsSync(SITE_PAGES)) {
     console.log(`  pages/${name}`)
   }
 } else {
-  console.warn("Warning: site/pages/ directory not found, skipping pages")
+  warning("Warning: site/pages/ directory not found, skipping pages")
 }
 
 // --- index.json ---
