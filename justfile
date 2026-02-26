@@ -1,3 +1,16 @@
+default: test
+
+install: build
+  cp dist/mcm ~/.local/bin/mcm
+
+uninstall:
+  rm -f ~/.local/bin/mcm
+
+build:
+  npm run build
+
+upgrade-bun:
+  bun upgrade
 
 format:
   prettier --write '**/*.{ts,tsx}'
