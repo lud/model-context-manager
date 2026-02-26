@@ -14,7 +14,8 @@
       "Bash(npm test:*)",
       "Bash(npm uninstall:*)",
       "Bash(npm run test:*)",
-      "Bash(just check)"
+      "Bash(just check)",
+      "WebFetch(domain:docs.github.com)"
     ]
   }
 }

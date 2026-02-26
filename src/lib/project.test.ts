@@ -30,13 +30,14 @@ afterAll(() => {
 
 describe("parseProject", () => {
   it("returns default project for empty object", () => {
-    expect(parseProject({})).toEqual({ extend: false, doctypes: {} })
+    expect(parseProject({})).toEqual({ extend: false, doctypes: {}, sync: [] })
   })
 
   it("respects extend: true when provided", () => {
     expect(parseProject({ extend: true })).toEqual({
       extend: true,
       doctypes: {},
+      sync: [],
     })
   })
 
@@ -56,6 +57,7 @@ describe("parseProject", () => {
     expect(parseProject({ extend: false, unknown: "field" })).toEqual({
       extend: false,
       doctypes: {},
+      sync: [],
     })
   })
 
@@ -65,6 +67,7 @@ describe("parseProject", () => {
     ).toEqual({
       extend: false,
       doctypes: {},
+      sync: [],
     })
   })
 
@@ -256,5 +259,146 @@ describe("getProject", () => {
     expect(cli.abortError).toHaveBeenCalledWith(
       "Could not find .mcm.json configuration file",
     )
+  })
+})
+
+describe("parseProject sync", () => {
+  it("gives sync: [] by default", () => {
+    expect(parseProject({}).sync).toEqual([])
+  })
+
+  it("accepts string upstream", () => {
+    const result = parseProject({
+      sync: [{ upstream: "../data", local: "lib/data" }],
+    })
+    expect(result.sync[0].upstream).toBe("../data")
+    expect(result.sync[0].mode).toBe("receive_merge")
+  })
+
+  it("accepts GitHub object upstream", () => {
+    const result = parseProject({
+      sync: [
+        {
+          upstream: { github: "owner/repo", path: "src/lib" },
+          local: "vendor/lib",
+        },
+      ],
+    })
+    expect(result.sync[0].upstream).toEqual({
+      github: "owner/repo",
+      path: "src/lib",
+    })
+  })
+
+  it("throws when local is missing", () => {
+    expect(() => parseProject({ sync: [{ upstream: "../data" }] })).toThrow(
+      ZodError,
+    )
+  })
+
+  it("throws for invalid mode", () => {
+    expect(() =>
+      parseProject({
+        sync: [{ upstream: "../data", local: "lib", mode: "bad" }],
+      }),
+    ).toThrow(ZodError)
+  })
+
+  it("defaults mode to receive_merge", () => {
+    const result = parseProject({
+      sync: [{ upstream: "../data", local: "lib/data" }],
+    })
+    expect(result.sync[0].mode).toBe("receive_merge")
+  })
+
+  it("accepts receive_mirror mode", () => {
+    const result = parseProject({
+      sync: [
+        { upstream: "../data", local: "lib/data", mode: "receive_mirror" },
+      ],
+    })
+    expect(result.sync[0].mode).toBe("receive_mirror")
+  })
+})
+
+describe("loadProjectOrFail GitHub repo normalization", () => {
+  const ghFixture = join(
+    import.meta.dirname,
+    "../../test/fixtures/doctypes/github-url-formats",
+  )
+
+  function loadGitHubRepos() {
+    const project = loadProjectOrFail(join(ghFixture, ".mcm.json"))
+    return project.sync.map((s) => {
+      if (s.upstream.kind !== "github") throw new Error("expected github")
+      return s.upstream.repo
+    })
+  }
+
+  it('normalizes "https://github.com/owner/repo" to "owner/repo"', () => {
+    const repos = loadGitHubRepos()
+    expect(repos[0]).toBe("owner/repo")
+  })
+
+  it('normalizes "https://github.com/owner/repo.git" to "owner/repo"', () => {
+    const repos = loadGitHubRepos()
+    expect(repos[1]).toBe("owner/repo")
+  })
+
+  it('normalizes "http://github.com/owner/repo" to "owner/repo"', () => {
+    const repos = loadGitHubRepos()
+    expect(repos[2]).toBe("owner/repo")
+  })
+
+  it('passes through "owner/repo" unchanged', () => {
+    const repos = loadGitHubRepos()
+    expect(repos[3]).toBe("owner/repo")
+  })
+})
+
+describe("loadProjectOrFail sync resolution", () => {
+  const syncFixture = join(
+    import.meta.dirname,
+    "../../test/fixtures/doctypes/with-sync",
+  )
+
+  it("resolves relative string upstream to absolute path", () => {
+    const project = loadProjectOrFail(join(syncFixture, ".mcm.json"))
+    const spec = project.sync.find(
+      (s) => s.upstream.kind === "localfs" && s.local.endsWith("local-copy"),
+    )!
+    expect(spec.upstream).toEqual({
+      kind: "localfs",
+      path: resolve(syncFixture, "../some-source"),
+    })
+  })
+
+  it("keeps absolute string upstream unchanged", () => {
+    const project = loadProjectOrFail(join(syncFixture, ".mcm.json"))
+    const spec = project.sync.find(
+      (s) =>
+        s.upstream.kind === "localfs" &&
+        (s.upstream as { path: string }).path === "/absolute/source",
+    )!
+    expect(spec.upstream).toEqual({
+      kind: "localfs",
+      path: "/absolute/source",
+    })
+  })
+
+  it("resolves GitHub upstream with leading slash trimmed from path", () => {
+    const project = loadProjectOrFail(join(syncFixture, ".mcm.json"))
+    const spec = project.sync.find((s) => s.upstream.kind === "github")!
+    expect(spec.upstream).toEqual({
+      kind: "github",
+      repo: "owner/repo",
+      path: "src/lib",
+    })
+  })
+
+  it("resolves relative local to absolute path", () => {
+    const project = loadProjectOrFail(join(syncFixture, ".mcm.json"))
+    const spec = project.sync[0]
+    expect(spec.local).toBe(resolve(syncFixture, "local-copy"))
   })
 })

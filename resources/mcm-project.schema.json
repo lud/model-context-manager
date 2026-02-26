@@ -53,6 +53,60 @@
         ],
         "description": "Configuration for a single doctype."
       }
+    },
+    "sync": {
+      "default": [],
+      "description": "File synchronization specifications.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "upstream": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "github": {
+                    "type": "string",
+                    "description": "GitHub repository in \"owner/repo\" format."
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Path within the repository."
+                  }
+                },
+                "required": [
+                  "github",
+                  "path"
+                ],
+                "description": "GitHub repository upstream source."
+              }
+            ],
+            "description": "Upstream source. A string for local paths, or a { github, path } object for GitHub repos."
+          },
+          "local": {
+            "type": "string",
+            "description": "Local destination path, relative to project directory or absolute."
+          },
+          "mode": {
+            "default": "receive_merge",
+            "description": "\"receive_merge\" adds/updates only. \"receive_mirror\" makes local an exact copy (deletes extras).",
+            "type": "string",
+            "enum": [
+              "receive_merge",
+              "receive_mirror"
+            ]
+          }
+        },
+        "required": [
+          "upstream",
+          "local"
+        ],
+        "description": "A single sync specification."
+      }
     }
   },
   "description": "MCM configuration file."

@@ -6,6 +6,7 @@ export function mockProject(overrides: Partial<ResolvedProject> = {}): void {
   vi.spyOn(projectModule, "getProject").mockReturnValue({
     extend: false,
     doctypes: {},
+    sync: [],
     projectFile: "/mock/.mcm.json",
     projectDir: "/mock",
     ...overrides,

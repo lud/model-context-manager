@@ -1,0 +1,17 @@
+{
+  "sync": [
+    {
+      "upstream": "../some-source",
+      "local": "local-copy"
+    },
+    {
+      "upstream": "/absolute/source",
+      "local": "abs-local",
+      "mode": "receive_mirror"
+    },
+    {
+      "upstream": { "github": "owner/repo", "path": "/src/lib" },
+      "local": "vendor/lib"
+    }
+  ]
+}

@@ -4,5 +4,11 @@
     "devlogs": {
       "dir": "context/devlogs"
     }
-  }
+  },
+  "sync": [
+    {
+      "local": "AGENTS.md",
+      "upstream": "CLAUDE.md"
+    }
+  ]
 }

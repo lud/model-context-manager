@@ -1,0 +1,20 @@
+{
+  "sync": [
+    {
+      "upstream": { "github": "https://github.com/owner/repo", "path": "docs" },
+      "local": "vendor/a"
+    },
+    {
+      "upstream": { "github": "https://github.com/owner/repo.git", "path": "docs" },
+      "local": "vendor/b"
+    },
+    {
+      "upstream": { "github": "http://github.com/owner/repo", "path": "docs" },
+      "local": "vendor/c"
+    },
+    {
+      "upstream": { "github": "owner/repo", "path": "docs" },
+      "local": "vendor/d"
+    }
+  ]
+}
