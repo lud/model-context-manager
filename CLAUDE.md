@@ -40,6 +40,16 @@ Use these functions for all output in day-to-day commands:
 | `debug(text)`    | cyan text                                                          |
 | `success(text)`  | green text                                                         |
 
+## File system helpers (`src/lib/fs.ts`)
+
+Use these wrappers instead of calling `node:fs` directly in commands. They call `abortError` with a human-readable message on failure.
+
+| Function                        | Wraps              |
+| ------------------------------- | ------------------ |
+| `readdirSyncOrAbort(path)`      | `readdirSync`      |
+| `readFileSyncOrAbort(path)`     | `readFileSync`     |
+| `writeFileSyncOrAbort(path, data)` | `writeFileSync` |
+
 ## Project system (`src/lib/project.ts`)
 
 - `.mcm.json` is located by walking up from CWD
