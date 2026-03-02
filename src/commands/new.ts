@@ -1,5 +1,6 @@
 import { command } from "cleye"
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync } from "node:fs"
+import { readdirSyncOrAbort, writeFileSyncOrAbort } from "../lib/fs.js"
 import { join } from "node:path"
 import * as cli from "../lib/cli.js"
 import { getProject } from "../lib/project.js"
@@ -40,7 +41,7 @@ export const newCommand = command(
     }
 
     const slug = slugify(titleWords.join(" "))
-    const files = readdirSync(entry.dir)
+    const files = readdirSyncOrAbort(entry.dir)
     const filename = nextFilename(files, entry, slug)
     const fullPath = join(entry.dir, filename)
 
@@ -48,7 +49,7 @@ export const newCommand = command(
       cli.abortError(`File already exists: ${fullPath}`)
     }
 
-    writeFileSync(fullPath, `# ${titleWords.join(" ")}\n`)
+    writeFileSyncOrAbort(fullPath, `# ${titleWords.join(" ")}\n`)
     cli.writeln(toDisplayPath(fullPath, process.cwd()))
   },
 )

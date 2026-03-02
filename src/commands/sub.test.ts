@@ -232,7 +232,9 @@ describe("sub switch", () => {
     mockSubProject()
     vi.mocked(p.select).mockResolvedValue(Symbol("cancel") as never)
     vi.mocked(p.isCancel).mockReturnValue(true)
-    vi.spyOn(process, "exit").mockImplementation(() => { throw new Error("exit") })
+    vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("exit")
+    })
 
     await expect(subSwitch([])).rejects.toThrow("exit")
     expect(p.cancel).toHaveBeenCalledWith("Cancelled.")

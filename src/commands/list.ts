@@ -1,5 +1,5 @@
 import { command } from "cleye"
-import { readdirSync } from "node:fs"
+import { readdirSyncOrAbort } from "../lib/fs.js"
 import { join } from "node:path"
 import * as cli from "../lib/cli.js"
 import { getProject } from "../lib/project.js"
@@ -53,7 +53,7 @@ export function listDoctypeFiles(
       `Doctype "${doctype}" requires a subcontext. Use "mcm sub switch" to select one.`,
     )
   }
-  const files = readdirSync(entry.dir).slice().sort()
+  const files = readdirSyncOrAbort(entry.dir).slice().sort()
   for (const file of files) {
     cli.writeln(toDisplayPath(join(entry.dir, file), process.cwd()))
   }

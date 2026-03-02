@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync } from "node:fs"
+import { readFileSyncOrAbort, writeFileSyncOrAbort } from "./fs.js"
 import { dirname, join } from "node:path"
 import envPaths from "env-paths"
 import { z } from "zod"
@@ -34,14 +35,14 @@ export function getGlobalConfig(): GlobalConfig {
   if (!existsSync(CONFIG_FILE)) {
     return { githubTokens: {}, currentSubcontexts: {} }
   }
-  const content = readFileSync(CONFIG_FILE, "utf-8")
+  const content = readFileSyncOrAbort(CONFIG_FILE, "utf-8")
   const raw = JSON.parse(content)
   return GlobalConfigSchema.parse(raw)
 }
 
 export function saveGlobalConfig(config: GlobalConfig): void {
   mkdirSync(dirname(CONFIG_FILE), { recursive: true })
-  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n")
+  writeFileSyncOrAbort(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n")
 }
 
 export function normalizeGithubUrl(url: string): string {
