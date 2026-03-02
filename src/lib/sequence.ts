@@ -5,7 +5,7 @@ import type { DoctypeEntry } from "./project.js"
  * Returns { seq, slug } or null if the name doesn't start with a numeric prefix.
  * "slug" is everything after the separator.
  */
-export function parseSeqPrefix(
+export function parseSeqPrefix (
   name: string,
   separator: string,
 ): { seq: number; slug: string } | null {
@@ -24,7 +24,7 @@ export type Rename = { from: string; to: string }
  * Sorted by (seq, slug); ties broken alphabetically by slug.
  * New positions are padded to the sequenceScheme width.
  */
-export function computeRenames(
+export function computeRenames (
   names: string[],
   opts: Pick<DoctypeEntry, "sequenceScheme" | "sequenceSeparator">,
 ): Rename[] {
@@ -57,7 +57,7 @@ export function computeRenames(
   return renames
 }
 
-export function formatDatetime(date: Date): string {
+export function formatDatetime (date: Date): string {
   const y = date.getFullYear().toString()
   const m = (date.getMonth() + 1).toString().padStart(2, "0")
   const d = date.getDate().toString().padStart(2, "0")
@@ -67,19 +67,16 @@ export function formatDatetime(date: Date): string {
   return `${y}${m}${d}${h}${min}${s}`
 }
 
-export function parseMaxSequence(files: string[], separator: string): number {
+export function parseMaxSequence (files: string[], separator: string): number {
   let max = 0
   for (const file of files) {
-    const idx = file.indexOf(separator)
-    if (idx <= 0) continue
-    const prefix = file.slice(0, idx)
-    const num = parseInt(prefix, 10)
-    if (!Number.isNaN(num) && num > max) max = num
+    const parsed = parseSeqPrefix(file, separator)
+    if (parsed !== null && parsed.seq > max) max = parsed.seq
   }
   return max
 }
 
-export function nextFilename(
+export function nextFilename (
   existingFiles: string[],
   doctype: DoctypeEntry,
   slug: string,
