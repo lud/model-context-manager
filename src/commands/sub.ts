@@ -1,6 +1,6 @@
 import { command } from "cleye"
 import * as p from "@clack/prompts"
-import { mkdirSync } from "node:fs"
+import { mkdirSync, renameSync } from "node:fs"
 import { isAbsolute, join } from "node:path"
 import * as cli from "../lib/cli.js"
 import {
@@ -16,12 +16,23 @@ import {
   resolveSubcontextArg,
 } from "../lib/subcontext.js"
 import { slugify } from "../lib/slugify.js"
+import { computeRenames } from "../lib/sequence.js"
 
 export const subCommand = command(
   {
     name: "sub",
     parameters: ["<action>", "[args...]"],
-    help: { description: "Manage subcontexts (add, switch, list, current)" },
+    help: {
+      description: "Manage subcontexts (add, switch, list, current, seqfix)",
+    },
+    flags: {
+      force: {
+        type: Boolean,
+        alias: "f",
+        default: false,
+        description: "Apply changes (for seqfix, default: dry-run)",
+      },
+    },
   },
   async (argv) => {
     switch (argv._.action) {
@@ -34,6 +45,8 @@ export const subCommand = command(
       case "current":
       case "which":
         return subCurrent()
+      case "seqfix":
+        return subSeqfix(argv.flags?.force ?? false)
       default:
         cli.abortError(`Unknown sub action: ${argv._.action}`)
     }
@@ -144,6 +157,57 @@ export function subCurrent(): void {
   cli.writeln(toDisplayPath(join(subcontextsAbsDir, current), process.cwd()))
 }
 
+export function subSeqfix(force: boolean): void {
+  const project = getProject()
+  const subcontextsAbsDir = getSubcontextsAbsDir(project)
+
+  const dirs = listSubcontexts(subcontextsAbsDir)
+  const renames = computeRenames(dirs, {
+    sequenceScheme: "000",
+    sequenceSeparator: ".",
+  })
+
+  if (renames.length === 0) {
+    cli.info("Nothing to rename.")
+    return
+  }
+
+  for (const { from, to } of renames) {
+    cli.info(`${from} → ${to}`)
+  }
+
+  if (!force) {
+    cli.info("")
+    cli.info("Run with -f to apply changes.")
+    return
+  }
+
+  const current = getCurrentSubcontext(project.projectDir)
+
+  // Two-phase rename to avoid conflicts: old → temp → new
+  const tmpSuffix = ".seqfix-tmp"
+  for (const { from } of renames) {
+    renameSync(
+      join(subcontextsAbsDir, from),
+      join(subcontextsAbsDir, from + tmpSuffix),
+    )
+  }
+  for (const { from, to } of renames) {
+    renameSync(
+      join(subcontextsAbsDir, from + tmpSuffix),
+      join(subcontextsAbsDir, to),
+    )
+  }
+
+  // Keep global config in sync if the active subcontext was renamed
+  const renamed = renames.find((r) => r.from === current)
+  if (renamed) {
+    setCurrentSubcontext(project.projectDir, renamed.to)
+  }
+
+  cli.success(`Renamed ${renames.length} dir(s).`)
+}
+
 /**
  * Manage subcontexts: add, switch between, list, or show the current one.
  *
@@ -154,6 +218,8 @@ export function subCurrent(): void {
  * mcm sub switch 1
  * mcm sub list
  * mcm sub current
+ * mcm sub seqfix
+ * mcm sub seqfix -f
  * ```
  */
 export function commentDoc() {}

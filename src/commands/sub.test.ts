@@ -18,7 +18,7 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import * as p from "@clack/prompts"
 import * as cli from "../lib/cli.js"
-import { subAdd, subSwitch, subList, subCurrent } from "./sub.js"
+import { subAdd, subSwitch, subList, subCurrent, subSeqfix } from "./sub.js"
 import { mockProject } from "../lib/project.test-helpers.js"
 
 vi.mock("@clack/prompts")
@@ -290,6 +290,94 @@ describe("sub current", () => {
     expect(() => subCurrent()).toThrow("abortError")
     expect(cli.abortError).toHaveBeenCalledWith(
       expect.stringContaining("No subcontext selected"),
+    )
+  })
+})
+
+describe("sub seqfix", () => {
+  it("prints renames and advises -f in dry-run mode", () => {
+    mkdirSync(join(featuresDir, "001.alpha"))
+    mkdirSync(join(featuresDir, "07.beta"))
+    mkdirSync(join(featuresDir, "007.gamma"))
+    mockSubProject()
+
+    subSeqfix(false)
+
+    expect(cli.info).toHaveBeenCalledWith(expect.stringContaining("07.beta"))
+    expect(cli.info).toHaveBeenCalledWith(expect.stringContaining("-f"))
+    expect(cli.success).not.toHaveBeenCalled()
+  })
+
+  it("prints 'Nothing to rename' when all dirs are correct", () => {
+    mkdirSync(join(featuresDir, "001.alpha"))
+    mkdirSync(join(featuresDir, "002.beta"))
+    mockSubProject()
+
+    subSeqfix(false)
+
+    expect(cli.info).toHaveBeenCalledWith("Nothing to rename.")
+  })
+
+  it("renames dirs and reports success when forced", () => {
+    mkdirSync(join(featuresDir, "001.alpha"))
+    mkdirSync(join(featuresDir, "07.beta"))
+    mkdirSync(join(featuresDir, "007.gamma"))
+    mockSubProject()
+
+    subSeqfix(true)
+
+    expect(cli.success).toHaveBeenCalledWith(
+      expect.stringContaining("Renamed 2 dir(s)"),
+    )
+    expect(existsSync(join(featuresDir, "001.alpha"))).toBe(true)
+    expect(existsSync(join(featuresDir, "002.beta"))).toBe(true)
+    expect(existsSync(join(featuresDir, "003.gamma"))).toBe(true)
+    expect(existsSync(join(featuresDir, "07.beta"))).toBe(false)
+    expect(existsSync(join(featuresDir, "007.gamma"))).toBe(false)
+  })
+
+  it("updates global config when the current subcontext is renamed", () => {
+    mkdirSync(join(featuresDir, "001.alpha"))
+    mkdirSync(join(featuresDir, "007.beta"))
+    storedSubcontexts[projectDir] = "007.beta"
+    mockSubProject()
+
+    subSeqfix(true)
+
+    expect(storedSubcontexts[projectDir]).toBe("002.beta")
+  })
+
+  it("does not update global config when current subcontext is unchanged", () => {
+    mkdirSync(join(featuresDir, "001.alpha"))
+    mkdirSync(join(featuresDir, "007.beta"))
+    storedSubcontexts[projectDir] = "001.alpha"
+    mockSubProject()
+
+    subSeqfix(true)
+
+    expect(storedSubcontexts[projectDir]).toBe("001.alpha")
+  })
+
+  it("leaves non-sequenced dirs untouched", () => {
+    mkdirSync(join(featuresDir, "001.alpha"))
+    mkdirSync(join(featuresDir, "scratch"))
+    mockSubProject()
+
+    subSeqfix(true)
+
+    expect(existsSync(join(featuresDir, "scratch"))).toBe(true)
+    expect(cli.info).toHaveBeenCalledWith("Nothing to rename.")
+  })
+
+  it("aborts when no subcontexts configured", () => {
+    mockProject({
+      projectFile: join(projectDir, ".mcm.json"),
+      projectDir: projectDir,
+    })
+
+    expect(() => subSeqfix(false)).toThrow("abortError")
+    expect(cli.abortError).toHaveBeenCalledWith(
+      "No subcontexts configured in .mcm.json",
     )
   })
 })

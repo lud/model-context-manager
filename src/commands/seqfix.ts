@@ -4,65 +4,9 @@ import { join } from "node:path"
 import * as cli from "../lib/cli.js"
 import { readdirSyncOrAbort } from "../lib/fs.js"
 import { getProject } from "../lib/project.js"
-import type { DoctypeEntry } from "../lib/project.js"
-
-/**
- * Parse a sequence prefix from a filename.
- * Returns { seq, slug } or null if the file doesn't match.
- * "slug" is everything after the separator (including the extension).
- */
-export function parseSeqPrefix (
-  filename: string,
-  separator: string,
-): { seq: number; slug: string } | null {
-  const idx = filename.indexOf(separator)
-  if (idx <= 0) return null
-  const prefix = filename.slice(0, idx)
-  if (!/^\d+$/.test(prefix)) return null
-  const seq = parseInt(prefix, 10)
-  return { seq, slug: filename.slice(idx + separator.length) }
-}
-
-export type Rename = { from: string; to: string }
-
-/**
- * Compute the list of renames needed to fix sequence numbering.
- * Files without a sequence prefix are left untouched.
- * Sorted by (seq, slug); ties broken alphabetically by slug.
- * New positions use the doctype's sequenceScheme for padding.
- */
-export function computeRenames (
-  files: string[],
-  doctype: Pick<DoctypeEntry, "sequenceScheme" | "sequenceSeparator">,
-): Rename[] {
-  const sep = doctype.sequenceSeparator
-  const scheme = doctype.sequenceScheme as string // caller ensures not "none"/"datetime"
-
-  const sequenced: Array<{ filename: string; seq: number; slug: string }> = []
-  for (const filename of files) {
-    const parsed = parseSeqPrefix(filename, sep)
-    if (parsed !== null) {
-      sequenced.push({ filename, ...parsed })
-    }
-  }
-
-  sequenced.sort((a, b) => {
-    if (a.seq !== b.seq) return a.seq - b.seq
-    return a.slug.localeCompare(b.slug)
-  })
-
-  const renames: Rename[] = []
-  for (let i = 0; i < sequenced.length; i++) {
-    const { filename, slug } = sequenced[i]
-    const newSeq = (i + 1).toString().padStart(scheme.length, "0")
-    const newFilename = `${newSeq}${sep}${slug}`
-    if (newFilename !== filename) {
-      renames.push({ from: filename, to: newFilename })
-    }
-  }
-
-  return renames
-}
+import { computeRenames } from "../lib/sequence.js"
+export { computeRenames, parseSeqPrefix } from "../lib/sequence.js"
+export type { Rename } from "../lib/sequence.js"
 
 export const seqfixCommand = command(
   {
@@ -145,4 +89,4 @@ export const seqfixCommand = command(
  * mcm seqfix devlogs -f
  * ```
  */
-export function commentDoc () { }
+export function commentDoc() {}
