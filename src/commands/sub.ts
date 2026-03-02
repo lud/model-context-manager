@@ -1,4 +1,5 @@
 import { command } from "cleye"
+import * as p from "@clack/prompts"
 import { mkdirSync } from "node:fs"
 import { isAbsolute, join } from "node:path"
 import * as cli from "../lib/cli.js"
@@ -22,7 +23,7 @@ export const subCommand = command(
     parameters: ["<action>", "[args...]"],
     help: { description: "Manage subcontexts (add, switch, list, current)" },
   },
-  (argv) => {
+  async (argv) => {
     switch (argv._.action) {
       case "add":
         return subAdd(argv._.args)
@@ -73,27 +74,43 @@ export function subAdd(args: string[]): void {
   cli.writeln(toDisplayPath(subcontextPath, process.cwd()))
 }
 
-export function subSwitch(args: string[]): void {
-  if (args.length === 0) {
-    cli.abortError("Usage: mcm sub switch <number-or-name>")
-  }
-
+export async function subSwitch(args: string[]): Promise<void> {
   const project = getProject()
   const subcontextsAbsDir = getSubcontextsAbsDir(project)
 
-  const query = args.join(" ")
-  const result = resolveSubcontextArg(subcontextsAbsDir, query)
+  let name: string
 
-  if (typeof result !== "string") {
-    if (result.error === "not-found") {
-      cli.abortError(`Subcontext not found: ${query}`)
-    } else {
-      cli.abortError(`Multiple subcontexts match: ${result.names.join(", ")}`)
+  if (args.length === 0) {
+    const dirs = listSubcontexts(subcontextsAbsDir)
+    if (dirs.length === 0) {
+      cli.abortError("No subcontexts found.")
     }
+    const current = getCurrentSubcontext(project.projectDir)
+    const selected = await p.select({
+      message: "Switch to subcontext",
+      options: dirs.map((dir) => ({ value: dir, label: dir })),
+      initialValue: current,
+    })
+    if (p.isCancel(selected)) {
+      p.cancel("Cancelled.")
+      process.exit(0)
+    }
+    name = selected
+  } else {
+    const query = args.join(" ")
+    const result = resolveSubcontextArg(subcontextsAbsDir, query)
+    if (typeof result !== "string") {
+      if (result.error === "not-found") {
+        cli.abortError(`Subcontext not found: ${query}`)
+      } else {
+        cli.abortError(`Multiple subcontexts match: ${result.names.join(", ")}`)
+      }
+    }
+    name = result
   }
 
-  setCurrentSubcontext(project.projectDir, result)
-  cli.writeln(result)
+  setCurrentSubcontext(project.projectDir, name)
+  cli.writeln(name)
 }
 
 export function subList(): void {

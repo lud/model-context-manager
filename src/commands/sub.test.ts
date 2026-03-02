@@ -16,10 +16,12 @@ import {
 } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
+import * as p from "@clack/prompts"
 import * as cli from "../lib/cli.js"
 import { subAdd, subSwitch, subList, subCurrent } from "./sub.js"
 import { mockProject } from "../lib/project.test-helpers.js"
 
+vi.mock("@clack/prompts")
 vi.mock("../lib/cli.js")
 vi.mock("../lib/project.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/project.js")>()
@@ -184,30 +186,63 @@ describe("sub switch", () => {
     expect(storedSubcontexts[projectDir]).toBe("001.alpha")
   })
 
-  it("aborts on not found", () => {
+  it("aborts on not found", async () => {
     mockSubProject()
 
-    expect(() => subSwitch(["nope"])).toThrow("abortError")
+    await expect(subSwitch(["nope"])).rejects.toThrow("abortError")
     expect(cli.abortError).toHaveBeenCalledWith(
       expect.stringContaining("not found"),
     )
   })
 
-  it("aborts on multiple matches", () => {
+  it("aborts on multiple matches", async () => {
     mkdirSync(join(featuresDir, "001.alpha"))
     mkdirSync(join(featuresDir, "002.also"))
     mockSubProject()
 
-    expect(() => subSwitch(["a"])).toThrow("abortError")
+    await expect(subSwitch(["a"])).rejects.toThrow("abortError")
     expect(cli.abortError).toHaveBeenCalledWith(
       expect.stringContaining("Multiple"),
     )
   })
 
-  it("aborts with no args", () => {
+  it("shows prompt when no args given", async () => {
+    mkdirSync(join(featuresDir, "001.alpha"))
+    mkdirSync(join(featuresDir, "002.beta"))
+    mockSubProject()
+    vi.mocked(p.select).mockResolvedValue("002.beta")
+    vi.mocked(p.isCancel).mockReturnValue(false)
+
+    await subSwitch([])
+
+    expect(p.select).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: [
+          { value: "001.alpha", label: "001.alpha" },
+          { value: "002.beta", label: "002.beta" },
+        ],
+      }),
+    )
+    expect(storedSubcontexts[projectDir]).toBe("002.beta")
+    expect(cli.writeln).toHaveBeenCalledWith("002.beta")
+  })
+
+  it("cancels prompt gracefully", async () => {
+    mkdirSync(join(featuresDir, "001.alpha"))
+    mockSubProject()
+    vi.mocked(p.select).mockResolvedValue(Symbol("cancel") as never)
+    vi.mocked(p.isCancel).mockReturnValue(true)
+    vi.spyOn(process, "exit").mockImplementation(() => { throw new Error("exit") })
+
+    await expect(subSwitch([])).rejects.toThrow("exit")
+    expect(p.cancel).toHaveBeenCalledWith("Cancelled.")
+  })
+
+  it("aborts when no args and no subcontexts exist", async () => {
     mockSubProject()
 
-    expect(() => subSwitch([])).toThrow("abortError")
+    await expect(subSwitch([])).rejects.toThrow("abortError")
+    expect(cli.abortError).toHaveBeenCalledWith("No subcontexts found.")
   })
 })
 
