@@ -31,6 +31,7 @@ describe("newCommand", () => {
           dir: tempDir,
           sequenceScheme: "000",
           sequenceSeparator: ".",
+          inSubcontext: false,
         },
       },
     })
@@ -54,6 +55,7 @@ describe("newCommand", () => {
           dir: tempDir,
           sequenceScheme: "none",
           sequenceSeparator: ".",
+          inSubcontext: false,
         },
       },
     })
@@ -76,6 +78,7 @@ describe("newCommand", () => {
           dir: tempDir,
           sequenceScheme: "none",
           sequenceSeparator: ".",
+          inSubcontext: false,
         },
       },
     })
@@ -109,6 +112,7 @@ describe("newCommand", () => {
           dir: "/nonexistent/path",
           sequenceScheme: "000",
           sequenceSeparator: ".",
+          inSubcontext: false,
         },
       },
     })
@@ -119,6 +123,28 @@ describe("newCommand", () => {
 
     expect(cli.abortError).toHaveBeenCalledWith(
       "Directory does not exist: /nonexistent/path",
+    )
+  })
+
+  it("aborts when managed doctype used without subcontext", () => {
+    mockProject({
+      currentSubcontext: false,
+      doctypes: {
+        notes: {
+          dir: tempDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          inSubcontext: true,
+        },
+      },
+    })
+
+    expect(() =>
+      newCommand.callback!({ _: { doctype: "notes", title: ["Test"] } }),
+    ).toThrow("abortError")
+
+    expect(cli.abortError).toHaveBeenCalledWith(
+      'Doctype "notes" requires a subcontext. Use "mcm sub switch" to select one.',
     )
   })
 })

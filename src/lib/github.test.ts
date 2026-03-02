@@ -49,7 +49,9 @@ describe("cloneRepo", () => {
     cloneRepo("owner/repo", "/tmp/dest", "my-token")
     expect(vi.mocked(execFileSync)).toHaveBeenCalledWith(
       "git",
-      expect.arrayContaining(["https://x-access-token:my-token@github.com/owner/repo.git"]),
+      expect.arrayContaining([
+        "https://x-access-token:my-token@github.com/owner/repo.git",
+      ]),
       expect.any(Object),
     )
   })

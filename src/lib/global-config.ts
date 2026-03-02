@@ -6,6 +6,7 @@ import { z } from "zod"
 const GlobalConfigSchema = z
   .object({
     githubTokens: z.record(z.string(), z.string()).default({}),
+    currentSubcontexts: z.record(z.string(), z.string()).default({}),
   })
   .strip()
 
@@ -18,9 +19,20 @@ export function globalConfigPath(): string {
   return CONFIG_FILE
 }
 
+export function getCurrentSubcontext(projectDir: string): string | undefined {
+  const config = getGlobalConfig()
+  return config.currentSubcontexts[projectDir]
+}
+
+export function setCurrentSubcontext(projectDir: string, name: string): void {
+  const config = getGlobalConfig()
+  config.currentSubcontexts[projectDir] = name
+  saveGlobalConfig(config)
+}
+
 export function getGlobalConfig(): GlobalConfig {
   if (!existsSync(CONFIG_FILE)) {
-    return { githubTokens: {} }
+    return { githubTokens: {}, currentSubcontexts: {} }
   }
   const content = readFileSync(CONFIG_FILE, "utf-8")
   const raw = JSON.parse(content)

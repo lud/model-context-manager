@@ -12,15 +12,27 @@ export const newCommand = command(
     name: "new",
     parameters: ["<doctype>", "<title...>"],
     help: { description: "Create a new file in a doctype" },
+    flags: {
+      sub: {
+        type: String,
+        description: "Use a specific subcontext",
+      },
+    },
   },
   (argv) => {
-    const project = getProject()
+    const project = getProject({ sub: argv.flags?.sub })
     const doctype = argv._.doctype
     const titleWords: string[] = argv._.title
 
     const entry = project.doctypes[doctype]
     if (!entry) {
       cli.abortError(`Unknown doctype: ${doctype}`)
+    }
+
+    if (entry.inSubcontext && !project.currentSubcontext) {
+      cli.abortError(
+        `Doctype "${doctype}" requires a subcontext. Use "mcm sub switch" to select one.`,
+      )
     }
 
     if (!existsSync(entry.dir)) {

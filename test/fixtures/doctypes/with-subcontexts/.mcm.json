@@ -1,0 +1,10 @@
+{
+  "doctypes": {
+    "notes": { "dir": "notes" },
+    "devlogs": { "dir": "context/devlogs" }
+  },
+  "subcontexts": {
+    "dir": "features",
+    "doctypes": ["notes"]
+  }
+}

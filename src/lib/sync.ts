@@ -32,10 +32,11 @@ export type SourceHandle = {
   cleanup?: () => void
 }
 
-export type GitHubSourceError =
-  | { error: "auth_required"; repo: string }
-  | { error: "auth_failed"; repo: string }
-  | { error: "network_error"; message: string }
+export type GitHubSourceError = {
+  error: "auth_required" | "auth_failed" | "network_error"
+  repo: string
+  message: string
+}
 
 export type GitHubResolveResult = SourceHandle | GitHubSourceError
 
@@ -66,11 +67,23 @@ export function resolveGitHubSource(
   if (!cloneResult.success) {
     rmSync(tmpDir, { recursive: true, force: true })
     if (isNetworkError(cloneResult.stderr)) {
-      return { error: "network_error", message: cloneResult.stderr }
+      return {
+        error: "network_error",
+        message: cloneResult.stderr,
+        repo: upstream.repo,
+      }
     }
     return token
-      ? { error: "auth_failed", repo: upstream.repo }
-      : { error: "auth_required", repo: upstream.repo }
+      ? {
+          error: "auth_failed",
+          message: "Authentication error",
+          repo: upstream.repo,
+        }
+      : {
+          error: "auth_required",
+          message: "Authentication error",
+          repo: upstream.repo,
+        }
   }
 
   rmSync(join(tmpDir, ".git"), { recursive: true, force: true })

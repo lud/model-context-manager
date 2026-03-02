@@ -12,15 +12,27 @@ export const nextCommand = command(
     name: "next",
     parameters: ["<doctype>", "[title...]"],
     help: { description: "Print the next filename for a doctype" },
+    flags: {
+      sub: {
+        type: String,
+        description: "Use a specific subcontext",
+      },
+    },
   },
   (argv) => {
-    const project = getProject()
+    const project = getProject({ sub: argv.flags?.sub })
     const doctype = argv._.doctype
     const titleWords: string[] = argv._.title ?? []
 
     const entry = project.doctypes[doctype]
     if (!entry) {
       cli.abortError(`Unknown doctype: ${doctype}`)
+    }
+
+    if (entry.inSubcontext && !project.currentSubcontext) {
+      cli.abortError(
+        `Doctype "${doctype}" requires a subcontext. Use "mcm sub switch" to select one.`,
+      )
     }
 
     const slug =

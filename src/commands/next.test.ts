@@ -27,6 +27,7 @@ describe("nextCommand", () => {
           dir: join(fixtureDir, "counter-three-digit"),
           sequenceScheme: "000",
           sequenceSeparator: ".",
+          inSubcontext: false,
         },
       },
     })
@@ -45,6 +46,7 @@ describe("nextCommand", () => {
           dir: join(fixtureDir, "empty"),
           sequenceScheme: "000",
           sequenceSeparator: ".",
+          inSubcontext: false,
         },
       },
     })
@@ -63,6 +65,7 @@ describe("nextCommand", () => {
           dir: join(fixtureDir, "empty"),
           sequenceScheme: "000",
           sequenceSeparator: ".",
+          inSubcontext: false,
         },
       },
     })
@@ -91,6 +94,7 @@ describe("nextCommand", () => {
           dir: "/nonexistent/path",
           sequenceScheme: "000",
           sequenceSeparator: ".",
+          inSubcontext: false,
         },
       },
     })
@@ -109,6 +113,7 @@ describe("nextCommand", () => {
           dir: join(fixtureDir, "counter-custom-sep"),
           sequenceScheme: "000",
           sequenceSeparator: " - ",
+          inSubcontext: false,
         },
       },
     })

@@ -5,6 +5,7 @@ import * as globalConfigModule from "./global-config.js"
 export function mockGlobalConfig(overrides?: Partial<GlobalConfig>): void {
   vi.spyOn(globalConfigModule, "getGlobalConfig").mockReturnValue({
     githubTokens: {},
+    currentSubcontexts: {},
     ...overrides,
   })
 }

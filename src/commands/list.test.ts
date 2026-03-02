@@ -3,6 +3,7 @@ import { join } from "node:path"
 import * as cli from "../lib/cli.js"
 import { listAllDoctypes, listCommand, listDoctypeFiles } from "./list.js"
 import { mockProject } from "../lib/project.test-helpers.js"
+import type { ResolvedProject } from "../lib/project.js"
 
 vi.mock("../lib/cli.js")
 vi.mock("../lib/project.js")
@@ -35,6 +36,7 @@ describe("listAllDoctypes", () => {
         dir: "/absolute/docs",
         sequenceScheme: "000",
         sequenceSeparator: ".",
+        inSubcontext: false,
       },
     }
     listAllDoctypes(doctypes)
@@ -44,14 +46,18 @@ describe("listAllDoctypes", () => {
 
 describe("listDoctypeFiles", () => {
   it("lists files in sorted order", () => {
-    const doctypes = {
-      notes: {
-        dir: join(listFilesFixture, "notes"),
-        sequenceScheme: "000",
-        sequenceSeparator: ".",
+    const project = {
+      currentSubcontext: false,
+      doctypes: {
+        notes: {
+          dir: join(listFilesFixture, "notes"),
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          inSubcontext: false,
+        },
       },
-    }
-    listDoctypeFiles(doctypes, "notes")
+    } as unknown as ResolvedProject
+    listDoctypeFiles(project, "notes")
 
     const calls = vi.mocked(cli.writeln).mock.calls.map((c) => c[0])
     const names = calls.map((p) => p.split("/").pop())
@@ -59,8 +65,30 @@ describe("listDoctypeFiles", () => {
   })
 
   it("calls cli.abortError for unknown doctype", () => {
-    expect(() => listDoctypeFiles({}, "unknown")).toThrow("abortError")
+    const project = {
+      currentSubcontext: false,
+      doctypes: {},
+    } as unknown as ResolvedProject
+    expect(() => listDoctypeFiles(project, "unknown")).toThrow("abortError")
     expect(cli.abortError).toHaveBeenCalledWith("Unknown doctype: unknown")
+  })
+
+  it("aborts when managed doctype used without subcontext", () => {
+    const project = {
+      currentSubcontext: false,
+      doctypes: {
+        notes: {
+          dir: join(listFilesFixture, "notes"),
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          inSubcontext: true,
+        },
+      },
+    } as unknown as ResolvedProject
+    expect(() => listDoctypeFiles(project, "notes")).toThrow("abortError")
+    expect(cli.abortError).toHaveBeenCalledWith(
+      'Doctype "notes" requires a subcontext. Use "mcm sub switch" to select one.',
+    )
   })
 })
 
@@ -81,6 +109,7 @@ describe("listCommand integration", () => {
           dir: notesDir,
           sequenceScheme: "000",
           sequenceSeparator: ".",
+          inSubcontext: false,
         },
       },
     })

@@ -23,7 +23,11 @@ vi.mock("../lib/global-config.js", async (importOriginal) => {
 })
 
 function mockGlobalConfig(overrides: Partial<GlobalConfig> = {}): void {
-  vi.mocked(getGlobalConfig).mockReturnValue({ githubTokens: {}, ...overrides })
+  vi.mocked(getGlobalConfig).mockReturnValue({
+    githubTokens: {},
+    currentSubcontexts: {},
+    ...overrides,
+  })
 }
 
 beforeEach(() => {
@@ -178,7 +182,11 @@ describe("syncCommand GitHub", () => {
       cleanup: vi.fn(),
     }
     vi.mocked(resolveGitHubSource)
-      .mockReturnValueOnce({ error: "auth_required", repo: "owner/repo" })
+      .mockReturnValueOnce({
+        error: "auth_required",
+        repo: "owner/repo",
+        message: "Authentication error",
+      })
       .mockReturnValueOnce(handle)
     vi.mocked(p.password).mockResolvedValue("new-token")
     vi.mocked(applyCopy).mockReturnValue({ status: "synced" })
@@ -211,7 +219,11 @@ describe("syncCommand GitHub", () => {
       cleanup: vi.fn(),
     }
     vi.mocked(resolveGitHubSource)
-      .mockReturnValueOnce({ error: "auth_required", repo: "owner/repo" })
+      .mockReturnValueOnce({
+        error: "auth_required",
+        repo: "owner/repo",
+        message: "Authentication error",
+      })
       .mockReturnValueOnce(handle)
     vi.mocked(p.select).mockResolvedValue("https://github.com/other/repo")
     vi.mocked(applyCopy).mockReturnValue({ status: "synced" })
@@ -232,6 +244,7 @@ describe("syncCommand GitHub", () => {
     vi.mocked(resolveGitHubSource).mockReturnValue({
       error: "auth_required",
       repo: "owner/repo",
+      message: "Authentication error",
     })
     vi.mocked(p.password).mockResolvedValue(Symbol("cancel") as never)
     vi.mocked(p.isCancel).mockReturnValue(true)
@@ -250,6 +263,7 @@ describe("syncCommand GitHub", () => {
     vi.mocked(resolveGitHubSource).mockReturnValue({
       error: "auth_failed",
       repo: "owner/repo",
+      message: "Authentication error",
     })
     vi.mocked(p.select).mockResolvedValue("skip")
 
@@ -272,7 +286,11 @@ describe("syncCommand GitHub", () => {
       cleanup: vi.fn(),
     }
     vi.mocked(resolveGitHubSource)
-      .mockReturnValueOnce({ error: "auth_failed", repo: "owner/repo" })
+      .mockReturnValueOnce({
+        error: "auth_failed",
+        repo: "owner/repo",
+        message: "Authentication error",
+      })
       .mockReturnValueOnce(handle)
     vi.mocked(p.select).mockResolvedValue("retry")
     vi.mocked(p.password).mockResolvedValue("new-token")
@@ -313,6 +331,7 @@ describe("syncCommand GitHub", () => {
     mockGlobalConfig({ githubTokens: {} })
     vi.mocked(resolveGitHubSource).mockReturnValue({
       error: "network_error",
+      repo: "owner/repo",
       message: "Could not resolve host",
     })
 

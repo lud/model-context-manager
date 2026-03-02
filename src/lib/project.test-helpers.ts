@@ -9,6 +9,8 @@ export function mockProject(overrides: Partial<ResolvedProject> = {}): void {
     sync: [],
     projectFile: "/mock/.mcm.json",
     projectDir: "/mock",
+    rawConfig: { extend: false, doctypes: {}, sync: [] },
+    currentSubcontext: false,
     ...overrides,
   })
 }

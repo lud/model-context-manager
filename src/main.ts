@@ -3,6 +3,7 @@ import { demoCommand } from "./commands/demo.js"
 import { listCommand } from "./commands/list.js"
 import { newCommand } from "./commands/new.js"
 import { nextCommand } from "./commands/next.js"
+import { subCommand } from "./commands/sub.js"
 import { syncCommand } from "./commands/sync.js"
 import { whichCommand } from "./commands/which.js"
 import { abortError } from "./lib/cli.js"
@@ -15,6 +16,7 @@ const argv = cleyeCLI({
     listCommand,
     newCommand,
     nextCommand,
+    subCommand,
     syncCommand,
     whichCommand,
   ],

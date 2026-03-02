@@ -34,7 +34,10 @@ describe("globalConfigPath", () => {
 
 describe("getGlobalConfig", () => {
   it("returns defaults when no file exists", () => {
-    expect(getGlobalConfig()).toEqual({ githubTokens: {} })
+    expect(getGlobalConfig()).toEqual({
+      githubTokens: {},
+      currentSubcontexts: {},
+    })
   })
 
   it("reads and parses existing file", () => {
@@ -47,6 +50,7 @@ describe("getGlobalConfig", () => {
     )
     expect(getGlobalConfig()).toEqual({
       githubTokens: { "https://github.com/owner/repo": "tok_123" },
+      currentSubcontexts: {},
     })
   })
 
@@ -56,7 +60,10 @@ describe("getGlobalConfig", () => {
       join(configDir, "mcm.global.json"),
       JSON.stringify({ githubTokens: {}, extra: "ignored" }),
     )
-    expect(getGlobalConfig()).toEqual({ githubTokens: {} })
+    expect(getGlobalConfig()).toEqual({
+      githubTokens: {},
+      currentSubcontexts: {},
+    })
   })
 
   it("throws on invalid JSON", () => {
@@ -70,18 +77,27 @@ describe("saveGlobalConfig", () => {
   it("saves file and creates directory", () => {
     saveGlobalConfig({
       githubTokens: { "https://github.com/a/b": "tok" },
+      currentSubcontexts: {},
     })
     const saved = getGlobalConfig()
     expect(saved).toEqual({
       githubTokens: { "https://github.com/a/b": "tok" },
+      currentSubcontexts: {},
     })
   })
 
   it("overwrites existing file", () => {
-    saveGlobalConfig({ githubTokens: { "https://github.com/a/b": "old" } })
-    saveGlobalConfig({ githubTokens: { "https://github.com/a/b": "new" } })
+    saveGlobalConfig({
+      githubTokens: { "https://github.com/a/b": "old" },
+      currentSubcontexts: {},
+    })
+    saveGlobalConfig({
+      githubTokens: { "https://github.com/a/b": "new" },
+      currentSubcontexts: {},
+    })
     expect(getGlobalConfig()).toEqual({
       githubTokens: { "https://github.com/a/b": "new" },
+      currentSubcontexts: {},
     })
   })
 })

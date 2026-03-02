@@ -1,7 +1,7 @@
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest"
 import { ZodError } from "zod"
 import {
-  loadProjectOrFail,
+  loadRawProject,
   getProject,
   locateProjectFile,
   parseProject,
@@ -174,91 +174,30 @@ describe("parseProject", () => {
   })
 })
 
-describe("locateProjectFile", () => {
-  it("finds .mcm.json in cwd", () => {
-    const start = join(fixtures, "with-config")
-    expect(locateProjectFile(start)).toBe(join(start, ".mcm.json"))
-  })
-
-  it("finds .mcm.json in ancestor directory", () => {
-    const start = join(fixtures, "with-config", "nested", "deeply")
-    expect(locateProjectFile(start)).toBe(
-      join(fixtures, "with-config", ".mcm.json"),
-    )
-  })
-
-  it("returns null when no config exists", () => {
-    const start = join(fixtures, "without-config", "nested", "deeply")
-    expect(locateProjectFile(start)).toBeNull()
-  })
-
-  const isRoot = process.getuid?.() === 0
-
-  it.skipIf(isRoot)("returns null on permission error", () => {
-    const noAccess = join(workspace, "no-access")
-    const child = join(noAccess, "child")
-    mkdirSync(child, { recursive: true })
-    chmodSync(noAccess, 0o000)
-
-    try {
-      expect(locateProjectFile(child)).toBeNull()
-    } finally {
-      chmodSync(noAccess, 0o755)
-    }
-  })
-})
-
-describe("loadProjectOrFail", () => {
-  const docFixtures = join(import.meta.dirname, "../../test/fixtures/doctypes")
-
-  it("resolves relative dir relative to project file directory", () => {
-    const project = loadProjectOrFail(
-      join(docFixtures, "relative-dir", ".mcm.json"),
-    )
-    expect(project.doctypes.notes.dir).toBe(
-      join(docFixtures, "relative-dir", "my-docs"),
-    )
-  })
-
-  it("keeps absolute dir unchanged", () => {
-    const project = loadProjectOrFail(
-      join(docFixtures, "absolute-dir", ".mcm.json"),
-    )
-    expect(project.doctypes.notes.dir).toBe("/absolute/path")
-  })
-
-  it("returns empty doctypes when none configured", () => {
-    const project = loadProjectOrFail(
-      join(docFixtures, "no-doctypes", ".mcm.json"),
-    )
-    expect(project.doctypes).toEqual({})
-  })
-
-  it("includes projectFile and projectDir in returned object", () => {
-    const filePath = join(docFixtures, "relative-dir", ".mcm.json")
-    const project = loadProjectOrFail(filePath)
-    expect(project.projectFile).toBe(resolve(filePath))
-    expect(project.projectDir).toBe(resolve(join(docFixtures, "relative-dir")))
-  })
-})
-
-describe("getProject", () => {
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  it("aborts when no project file is found", () => {
-    vi.mocked(cli.abortError).mockImplementation(() => {
-      throw new Error("abortError")
+describe("parseProject subcontexts", () => {
+  it("accepts valid subcontexts config", () => {
+    const result = parseProject({
+      doctypes: { notes: { dir: "notes" } },
+      subcontexts: { dir: "features", doctypes: ["notes"] },
     })
-    vi.spyOn(process, "cwd").mockReturnValue(
-      join(fixtures, "without-config", "nested", "deeply"),
-    )
+    expect(result.subcontexts).toEqual({
+      dir: "features",
+      doctypes: ["notes"],
+    })
+  })
 
-    expect(() => getProject()).toThrow("abortError")
-    expect(cli.abortError).toHaveBeenCalledWith(
-      "Could not find .mcm.json configuration file",
-    )
+  it("subcontexts is optional", () => {
+    const result = parseProject({})
+    expect(result.subcontexts).toBeUndefined()
+  })
+
+  it("throws when subcontexts.doctypes is empty", () => {
+    expect(() =>
+      parseProject({
+        doctypes: { notes: { dir: "notes" } },
+        subcontexts: { dir: "features", doctypes: [] },
+      }),
+    ).toThrow(ZodError)
   })
 })
 
@@ -321,73 +260,232 @@ describe("parseProject sync", () => {
   })
 })
 
-describe("loadProjectOrFail GitHub repo normalization", () => {
-  const ghFixture = join(
-    import.meta.dirname,
-    "../../test/fixtures/doctypes/github-url-formats",
-  )
+describe("locateProjectFile", () => {
+  it("finds .mcm.json in cwd", () => {
+    const start = join(fixtures, "with-config")
+    expect(locateProjectFile(start)).toBe(join(start, ".mcm.json"))
+  })
 
-  function loadGitHubRepos() {
-    const project = loadProjectOrFail(join(ghFixture, ".mcm.json"))
-    return project.sync.map((s) => {
+  it("finds .mcm.json in ancestor directory", () => {
+    const start = join(fixtures, "with-config", "nested", "deeply")
+    expect(locateProjectFile(start)).toBe(
+      join(fixtures, "with-config", ".mcm.json"),
+    )
+  })
+
+  it("returns null when no config exists", () => {
+    const start = join(fixtures, "without-config", "nested", "deeply")
+    expect(locateProjectFile(start)).toBeNull()
+  })
+
+  const isRoot = process.getuid?.() === 0
+
+  it.skipIf(isRoot)("returns null on permission error", () => {
+    const noAccess = join(workspace, "no-access")
+    const child = join(noAccess, "child")
+    mkdirSync(child, { recursive: true })
+    chmodSync(noAccess, 0o000)
+
+    try {
+      expect(locateProjectFile(child)).toBeNull()
+    } finally {
+      chmodSync(noAccess, 0o755)
+    }
+  })
+})
+
+describe("loadRawProject", () => {
+  it("resolves relative dir relative to project file directory", () => {
+    const project = loadRawProject(
+      { doctypes: { notes: { dir: "my-docs" } } },
+      "/some/project/.mcm.json",
+    )
+    expect(project.doctypes.notes.dir).toBe("/some/project/my-docs")
+  })
+
+  it("keeps absolute dir unchanged", () => {
+    const project = loadRawProject(
+      { doctypes: { notes: { dir: "/absolute/path" } } },
+      "/some/project/.mcm.json",
+    )
+    expect(project.doctypes.notes.dir).toBe("/absolute/path")
+  })
+
+  it("returns empty doctypes when none configured", () => {
+    const project = loadRawProject({}, "/some/project/.mcm.json")
+    expect(project.doctypes).toEqual({})
+  })
+
+  it("includes projectFile and projectDir in returned object", () => {
+    const project = loadRawProject({}, "/some/project/.mcm.json")
+    expect(project.projectFile).toBe("/some/project/.mcm.json")
+    expect(project.projectDir).toBe("/some/project")
+  })
+
+  it("sets currentSubcontext to false when no subcontext provided", () => {
+    const project = loadRawProject({}, "/some/project/.mcm.json")
+    expect(project.currentSubcontext).toBe(false)
+  })
+
+  it("sets inSubcontext false on all doctypes when no subcontexts configured", () => {
+    const project = loadRawProject(
+      { doctypes: { notes: { dir: "notes" } } },
+      "/some/project/.mcm.json",
+    )
+    for (const entry of Object.values(project.doctypes)) {
+      expect(entry.inSubcontext).toBe(false)
+    }
+  })
+
+  it("stores rawConfig on the returned object", () => {
+    const project = loadRawProject(
+      { doctypes: { notes: { dir: "notes" } } },
+      "/some/project/.mcm.json",
+    )
+    expect(project.rawConfig.doctypes.notes.dir).toBe("notes")
+  })
+
+  it("throws ZodError for invalid raw input", () => {
+    expect(() =>
+      loadRawProject({ extend: "bad" }, "/some/project/.mcm.json"),
+    ).toThrow(ZodError)
+  })
+})
+
+describe("loadRawProject with subcontexts", () => {
+  const projectFile = "/some/project/.mcm.json"
+  const raw = {
+    doctypes: {
+      notes: { dir: "notes" },
+      devlogs: { dir: "context/devlogs" },
+    },
+    subcontexts: { dir: "features", doctypes: ["notes"] },
+  }
+
+  it("marks managed doctypes with inSubcontext true", () => {
+    const project = loadRawProject(raw, projectFile)
+    expect(project.doctypes.notes.inSubcontext).toBe(true)
+    expect(project.doctypes.devlogs.inSubcontext).toBe(false)
+  })
+
+  it("resolves managed doctype dir through subcontext when provided", () => {
+    const project = loadRawProject(raw, projectFile, {
+      subcontext: "001.test-feature",
+    })
+    expect(project.doctypes.notes.dir).toBe(
+      "/some/project/features/001.test-feature/notes",
+    )
+    expect(project.currentSubcontext).toBe("001.test-feature")
+  })
+
+  it("resolves non-managed doctype dir normally even with subcontext", () => {
+    const project = loadRawProject(raw, projectFile, {
+      subcontext: "001.test-feature",
+    })
+    expect(project.doctypes.devlogs.dir).toBe("/some/project/context/devlogs")
+  })
+
+  it("resolves managed doctype dir normally when no subcontext provided", () => {
+    const project = loadRawProject(raw, projectFile)
+    expect(project.doctypes.notes.dir).toBe("/some/project/notes")
+  })
+
+  it("throws when subcontexts references nonexistent doctype", () => {
+    expect(() =>
+      loadRawProject(
+        {
+          doctypes: { notes: { dir: "notes" } },
+          subcontexts: { dir: "features", doctypes: ["nonexistent"] },
+        },
+        projectFile,
+      ),
+    ).toThrow('Subcontexts references unknown doctype: "nonexistent"')
+  })
+})
+
+describe("loadRawProject GitHub repo normalization", () => {
+  const raw = {
+    sync: [
+      {
+        upstream: { github: "https://github.com/owner/repo", path: "docs" },
+        local: "vendor/a",
+      },
+      {
+        upstream: { github: "https://github.com/owner/repo.git", path: "docs" },
+        local: "vendor/b",
+      },
+      {
+        upstream: { github: "http://github.com/owner/repo", path: "docs" },
+        local: "vendor/c",
+      },
+      { upstream: { github: "owner/repo", path: "docs" }, local: "vendor/d" },
+    ],
+  }
+
+  function getRepos() {
+    return loadRawProject(raw, "/p/.mcm.json").sync.map((s) => {
       if (s.upstream.kind !== "github") throw new Error("expected github")
       return s.upstream.repo
     })
   }
 
   it('normalizes "https://github.com/owner/repo" to "owner/repo"', () => {
-    const repos = loadGitHubRepos()
-    expect(repos[0]).toBe("owner/repo")
+    expect(getRepos()[0]).toBe("owner/repo")
   })
 
   it('normalizes "https://github.com/owner/repo.git" to "owner/repo"', () => {
-    const repos = loadGitHubRepos()
-    expect(repos[1]).toBe("owner/repo")
+    expect(getRepos()[1]).toBe("owner/repo")
   })
 
   it('normalizes "http://github.com/owner/repo" to "owner/repo"', () => {
-    const repos = loadGitHubRepos()
-    expect(repos[2]).toBe("owner/repo")
+    expect(getRepos()[2]).toBe("owner/repo")
   })
 
   it('passes through "owner/repo" unchanged', () => {
-    const repos = loadGitHubRepos()
-    expect(repos[3]).toBe("owner/repo")
+    expect(getRepos()[3]).toBe("owner/repo")
   })
 })
 
-describe("loadProjectOrFail sync resolution", () => {
-  const syncFixture = join(
-    import.meta.dirname,
-    "../../test/fixtures/doctypes/with-sync",
-  )
+describe("loadRawProject sync resolution", () => {
+  const projectFile = "/some/project/.mcm.json"
+  const raw = {
+    sync: [
+      { upstream: "../some-source", local: "local-copy" },
+      {
+        upstream: "/absolute/source",
+        local: "abs-local",
+        mode: "receive_mirror",
+      },
+      {
+        upstream: { github: "owner/repo", path: "/src/lib" },
+        local: "vendor/lib",
+      },
+    ],
+  }
 
   it("resolves relative string upstream to absolute path", () => {
-    const project = loadProjectOrFail(join(syncFixture, ".mcm.json"))
+    const project = loadRawProject(raw, projectFile)
     const spec = project.sync.find(
       (s) => s.upstream.kind === "localfs" && s.local.endsWith("local-copy"),
     )!
     expect(spec.upstream).toEqual({
       kind: "localfs",
-      path: resolve(syncFixture, "../some-source"),
+      path: "/some/some-source",
     })
   })
 
   it("keeps absolute string upstream unchanged", () => {
-    const project = loadProjectOrFail(join(syncFixture, ".mcm.json"))
+    const project = loadRawProject(raw, projectFile)
     const spec = project.sync.find(
       (s) =>
         s.upstream.kind === "localfs" &&
         (s.upstream as { path: string }).path === "/absolute/source",
     )!
-    expect(spec.upstream).toEqual({
-      kind: "localfs",
-      path: "/absolute/source",
-    })
+    expect(spec.upstream).toEqual({ kind: "localfs", path: "/absolute/source" })
   })
 
   it("resolves GitHub upstream with leading slash trimmed from path", () => {
-    const project = loadProjectOrFail(join(syncFixture, ".mcm.json"))
+    const project = loadRawProject(raw, projectFile)
     const spec = project.sync.find((s) => s.upstream.kind === "github")!
     expect(spec.upstream).toEqual({
       kind: "github",
@@ -397,8 +495,27 @@ describe("loadProjectOrFail sync resolution", () => {
   })
 
   it("resolves relative local to absolute path", () => {
-    const project = loadProjectOrFail(join(syncFixture, ".mcm.json"))
-    const spec = project.sync[0]
-    expect(spec.local).toBe(resolve(syncFixture, "local-copy"))
+    const project = loadRawProject(raw, projectFile)
+    expect(project.sync[0].local).toBe("/some/project/local-copy")
+  })
+})
+
+describe("getProject", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("aborts when no project file is found", () => {
+    vi.mocked(cli.abortError).mockImplementation(() => {
+      throw new Error("abortError")
+    })
+    vi.spyOn(process, "cwd").mockReturnValue(
+      join(fixtures, "without-config", "nested", "deeply"),
+    )
+
+    expect(() => getProject()).toThrow("abortError")
+    expect(cli.abortError).toHaveBeenCalledWith(
+      "Could not find .mcm.json configuration file",
+    )
   })
 })

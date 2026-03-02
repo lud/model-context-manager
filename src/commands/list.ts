@@ -3,7 +3,7 @@ import { readdirSync } from "node:fs"
 import { join } from "node:path"
 import * as cli from "../lib/cli.js"
 import { getProject } from "../lib/project.js"
-import type { Project } from "../lib/project.js"
+import type { ResolvedProject } from "../lib/project.js"
 import { toDisplayPath } from "../lib/paths.js"
 
 export const listCommand = command(
@@ -11,19 +11,25 @@ export const listCommand = command(
     name: "list",
     parameters: ["[doctype]"],
     help: { description: "List doctypes or files in a doctype" },
+    flags: {
+      sub: {
+        type: String,
+        description: "Use a specific subcontext",
+      },
+    },
   },
   (argv) => {
-    const project = getProject()
+    const project = getProject({ sub: argv.flags?.sub })
     const doctype = argv._.doctype
     if (doctype === undefined) {
       listAllDoctypes(project.doctypes)
     } else {
-      listDoctypeFiles(project.doctypes, doctype)
+      listDoctypeFiles(project, doctype)
     }
   },
 )
 
-export function listAllDoctypes(doctypes: Project["doctypes"]): void {
+export function listAllDoctypes(doctypes: ResolvedProject["doctypes"]): void {
   const entries = Object.entries(doctypes)
   if (entries.length === 0) {
     cli.warning("No doctypes configured.")
@@ -35,12 +41,17 @@ export function listAllDoctypes(doctypes: Project["doctypes"]): void {
 }
 
 export function listDoctypeFiles(
-  doctypes: Project["doctypes"],
+  project: ResolvedProject,
   doctype: string,
 ): void {
-  const entry = doctypes[doctype]
+  const entry = project.doctypes[doctype]
   if (!entry) {
     cli.abortError(`Unknown doctype: ${doctype}`)
+  }
+  if (entry.inSubcontext && !project.currentSubcontext) {
+    cli.abortError(
+      `Doctype "${doctype}" requires a subcontext. Use "mcm sub switch" to select one.`,
+    )
   }
   const files = readdirSync(entry.dir).slice().sort()
   for (const file of files) {
