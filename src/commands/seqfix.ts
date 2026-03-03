@@ -25,14 +25,10 @@ export const seqfixCommand = command(
         default: false,
         description: "Apply the renames (default: dry-run)",
       },
-      sub: {
-        type: String,
-        description: "Use a specific subcontext",
-      },
     },
   },
   (argv) => {
-    const project = getProject({ sub: argv.flags?.sub })
+    const project = getProject()
     const doctype = argv._.doctype
 
     const entry = project.doctypes[doctype]
