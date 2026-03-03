@@ -1,4 +1,4 @@
-import type { DoctypeEntry } from "./project.js"
+import type { DoctypeEntry, DoctypeFileEntry } from "./project.js"
 
 /**
  * Parse a sequence prefix from a name (filename or directory name).
@@ -51,6 +51,53 @@ export function computeRenames (
     const newName = `${newSeq}${sep}${slug}`
     if (newName !== name) {
       renames.push({ from: name, to: newName })
+    }
+  }
+
+  return renames
+}
+
+export type DirRename = { dir: string; from: string; to: string }
+
+/**
+ * Compute renames to fix sequence numbering across multiple directories.
+ * Files are sorted globally by (seq, slug); directory order is irrelevant.
+ * Returns only entries where the new name differs from the old name.
+ */
+export function computeGlobalRenames (
+  entries: DoctypeFileEntry[],
+  opts: Pick<DoctypeEntry, "sequenceScheme" | "sequenceSeparator">,
+): DirRename[] {
+  const sep = opts.sequenceSeparator
+  const scheme = opts.sequenceScheme as string // caller ensures not "none"/"datetime"
+
+  const sequenced: Array<{
+    dir: string
+    name: string
+    seq: number
+    slug: string
+  }> = []
+  for (const { dir, files } of entries) {
+    for (const name of files) {
+      const parsed = parseSeqPrefix(name, sep)
+      if (parsed !== null) {
+        sequenced.push({ dir, name, ...parsed })
+      }
+    }
+  }
+
+  sequenced.sort((a, b) => {
+    if (a.seq !== b.seq) return a.seq - b.seq
+    return a.slug.localeCompare(b.slug)
+  })
+
+  const renames: DirRename[] = []
+  for (let i = 0; i < sequenced.length; i++) {
+    const { dir, name, slug } = sequenced[i]
+    const newSeq = (i + 1).toString().padStart(scheme.length, "0")
+    const newName = `${newSeq}${sep}${slug}`
+    if (newName !== name) {
+      renames.push({ dir, from: name, to: newName })
     }
   }
 

@@ -1,0 +1,9 @@
+{
+  "doctypes": {
+    "notes": { "dir": "notes" }
+  },
+  "subcontexts": {
+    "dir": "features",
+    "doctypes": ["notes"]
+  }
+}

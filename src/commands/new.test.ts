@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import * as cli from "../lib/cli.js"
@@ -124,6 +131,55 @@ describe("newCommand", () => {
     expect(cli.abortError).toHaveBeenCalledWith(
       "Directory does not exist: /nonexistent/path",
     )
+  })
+
+  it("uses global max sequence across all subcontexts", () => {
+    const base = mkdtempSync(join(tmpdir(), "mcm-new-sub-test-"))
+    try {
+      const sub1Notes = join(base, "features/001.sub-a/notes")
+      const sub2Notes = join(base, "features/002.sub-b/notes")
+      mkdirSync(sub1Notes, { recursive: true })
+      mkdirSync(sub2Notes, { recursive: true })
+      writeFileSync(join(sub1Notes, "001.first.md"), "")
+      writeFileSync(join(sub1Notes, "002.second.md"), "")
+      // sub2 is empty (active subcontext)
+
+      mockProject({
+        projectDir: base,
+        currentSubcontext: "002.sub-b",
+        doctypes: {
+          notes: {
+            dir: sub2Notes,
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+            inSubcontext: true,
+          },
+        },
+        rawConfig: {
+          extend: false,
+          doctypes: {
+            notes: {
+              dir: "notes",
+              sequenceScheme: "000",
+              sequenceSeparator: ".",
+            },
+          },
+          sync: [],
+          subcontexts: { dir: "features", doctypes: ["notes"] },
+        },
+      })
+
+      newCommand.callback!({
+        _: { doctype: "notes", title: ["Third", "Note"] },
+      })
+
+      expect(cli.writeln).toHaveBeenCalledWith(
+        expect.stringContaining("003.third-note.md"),
+      )
+      expect(existsSync(join(sub2Notes, "003.third-note.md"))).toBe(true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
   })
 
   it("aborts when managed doctype used without subcontext", () => {

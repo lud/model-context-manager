@@ -1,9 +1,9 @@
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { dirname, isAbsolute, join, resolve } from "node:path"
 import { z } from "zod"
 import { abortError } from "./cli.js"
 import { getCurrentSubcontext } from "./global-config.js"
-import { resolveSubcontextArg } from "./subcontext.js"
+import { listSubcontexts, resolveSubcontextArg } from "./subcontext.js"
 
 export const DoctypeKeySchema = z
   .string()
@@ -263,6 +263,46 @@ export function getProject(opts?: { sub?: string }): ResolvedProject {
       `Invalid project configuration: ${err instanceof Error ? err.message : String(err)}`,
     )
   }
+}
+
+export type DoctypeFileEntry = { dir: string; files: string[] }
+
+export function listDoctypeFilesAcrossSubcontexts(
+  project: ResolvedProject,
+  doctypeKey: string,
+): DoctypeFileEntry[] {
+  const entry = project.doctypes[doctypeKey]
+
+  if (!entry.inSubcontext) {
+    let files: string[] = []
+    try {
+      files = readdirSync(entry.dir)
+    } catch {
+      // treat missing dir as empty
+    }
+    return [{ dir: entry.dir, files }]
+  }
+
+  const rawSubcontextsDir = project.rawConfig.subcontexts!.dir
+  const subcontextsAbsDir = isAbsolute(rawSubcontextsDir)
+    ? rawSubcontextsDir
+    : join(project.projectDir, rawSubcontextsDir)
+
+  const subDirs = listSubcontexts(subcontextsAbsDir)
+  const rawDoctypeDir = project.rawConfig.doctypes[doctypeKey].dir
+
+  const result: DoctypeFileEntry[] = []
+  for (const subDir of subDirs) {
+    const dir = join(subcontextsAbsDir, subDir, rawDoctypeDir)
+    let files: string[] = []
+    try {
+      files = readdirSync(dir)
+    } catch {
+      // silently skip missing dirs
+    }
+    result.push({ dir, files })
+  }
+  return result
 }
 
 export function locateProjectFile(cwd: string): string | null {

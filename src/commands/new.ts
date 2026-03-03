@@ -1,9 +1,12 @@
 import { command } from "cleye"
 import { existsSync, mkdirSync } from "node:fs"
-import { readdirSyncOrAbort, writeFileSyncOrAbort } from "../lib/fs.js"
+import { writeFileSyncOrAbort } from "../lib/fs.js"
 import { join } from "node:path"
 import * as cli from "../lib/cli.js"
-import { getProject } from "../lib/project.js"
+import {
+  getProject,
+  listDoctypeFilesAcrossSubcontexts,
+} from "../lib/project.js"
 import { toDisplayPath } from "../lib/paths.js"
 import { nextFilename } from "../lib/sequence.js"
 import { slugify } from "../lib/slugify.js"
@@ -41,7 +44,8 @@ export const newCommand = command(
     }
 
     const slug = slugify(titleWords.join(" "))
-    const files = readdirSyncOrAbort(entry.dir)
+    const allEntries = listDoctypeFilesAcrossSubcontexts(project, doctype)
+    const files = allEntries.flatMap((e) => e.files)
     const filename = nextFilename(files, entry, slug)
     const fullPath = join(entry.dir, filename)
 

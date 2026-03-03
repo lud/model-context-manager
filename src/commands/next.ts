@@ -1,8 +1,10 @@
 import { command } from "cleye"
-import { readdirSync } from "node:fs"
 import { join } from "node:path"
 import * as cli from "../lib/cli.js"
-import { getProject } from "../lib/project.js"
+import {
+  getProject,
+  listDoctypeFilesAcrossSubcontexts,
+} from "../lib/project.js"
 import { toDisplayPath } from "../lib/paths.js"
 import { nextFilename } from "../lib/sequence.js"
 import { slugify } from "../lib/slugify.js"
@@ -38,12 +40,8 @@ export const nextCommand = command(
     const slug =
       titleWords.length > 0 ? slugify(titleWords.join(" ")) : "title-of-doc"
 
-    let files: string[] = []
-    try {
-      files = readdirSync(entry.dir)
-    } catch {
-      // treat missing dir as empty
-    }
+    const allEntries = listDoctypeFilesAcrossSubcontexts(project, doctype)
+    const files = allEntries.flatMap((e) => e.files)
 
     const filename = nextFilename(files, entry, slug)
     cli.writeln(toDisplayPath(join(entry.dir, filename), process.cwd()))

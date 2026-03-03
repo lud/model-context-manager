@@ -4,6 +4,11 @@ import * as cli from "../lib/cli.js"
 import { nextCommand } from "./next.js"
 import { mockProject } from "../lib/project.test-helpers.js"
 
+const multiSubcontextFixture = join(
+  import.meta.dirname,
+  "../../test/fixtures/doctypes/multi-subcontext",
+)
+
 vi.mock("../lib/cli.js")
 vi.mock("../lib/project.js")
 
@@ -103,6 +108,42 @@ describe("nextCommand", () => {
 
     expect(cli.writeln).toHaveBeenCalledWith(
       expect.stringContaining("001.test.md"),
+    )
+  })
+
+  it("uses global max sequence across all subcontexts", () => {
+    // fixture has: 001.feature-a/notes: 001.intro.md, 003.design.md
+    //              002.feature-b/notes: 001.login.md, 002.auth.md
+    // global max = 3, so next = 004
+    mockProject({
+      projectDir: multiSubcontextFixture,
+      currentSubcontext: "002.feature-b",
+      doctypes: {
+        notes: {
+          dir: join(multiSubcontextFixture, "features/002.feature-b/notes"),
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          inSubcontext: true,
+        },
+      },
+      rawConfig: {
+        extend: false,
+        doctypes: {
+          notes: {
+            dir: "notes",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
+        },
+        sync: [],
+        subcontexts: { dir: "features", doctypes: ["notes"] },
+      },
+    })
+
+    nextCommand.callback!({ _: { doctype: "notes", title: ["new", "note"] } })
+
+    expect(cli.writeln).toHaveBeenCalledWith(
+      expect.stringContaining("004.new-note.md"),
     )
   })
 

@@ -3,6 +3,7 @@ import { ZodError } from "zod"
 import {
   loadRawProject,
   getProject,
+  listDoctypeFilesAcrossSubcontexts,
   locateProjectFile,
   parseProject,
 } from "./project.js"
@@ -497,6 +498,64 @@ describe("loadRawProject sync resolution", () => {
   it("resolves relative local to absolute path", () => {
     const project = loadRawProject(raw, projectFile)
     expect(project.sync[0].local).toBe("/some/project/local-copy")
+  })
+})
+
+describe("listDoctypeFilesAcrossSubcontexts", () => {
+  const fixtureBase = join(
+    import.meta.dirname,
+    "../../test/fixtures/doctypes/multi-subcontext",
+  )
+
+  it("returns single entry for non-subcontext doctype", () => {
+    const project = loadRawProject(
+      { doctypes: { notes: { dir: "notes" } } },
+      "/nonexistent/.mcm.json",
+    )
+    const result = listDoctypeFilesAcrossSubcontexts(project, "notes")
+    expect(result).toHaveLength(1)
+    expect(result[0].dir).toBe("/nonexistent/notes")
+    expect(result[0].files).toEqual([]) // missing dir treated as empty
+  })
+
+  it("returns entries for all subcontexts", () => {
+    const project = loadRawProject(
+      {
+        doctypes: { notes: { dir: "notes" } },
+        subcontexts: { dir: "features", doctypes: ["notes"] },
+      },
+      join(fixtureBase, ".mcm.json"),
+    )
+    const result = listDoctypeFilesAcrossSubcontexts(project, "notes")
+    // 3 subcontext dirs: 001.feature-a, 002.feature-b, 003.feature-c
+    expect(result).toHaveLength(3)
+    expect(result[0].files.sort()).toEqual(["001.intro.md", "003.design.md"])
+    expect(result[1].files.sort()).toEqual(["001.login.md", "002.auth.md"])
+  })
+
+  it("returns empty files for subcontext dirs without the doctype directory", () => {
+    const project = loadRawProject(
+      {
+        doctypes: { notes: { dir: "notes" } },
+        subcontexts: { dir: "features", doctypes: ["notes"] },
+      },
+      join(fixtureBase, ".mcm.json"),
+    )
+    const result = listDoctypeFilesAcrossSubcontexts(project, "notes")
+    // 003.feature-c has no notes/ subdir
+    expect(result[2].files).toEqual([])
+  })
+
+  it("returns empty array when subcontexts dir does not exist", () => {
+    const project = loadRawProject(
+      {
+        doctypes: { notes: { dir: "notes" } },
+        subcontexts: { dir: "nonexistent-features", doctypes: ["notes"] },
+      },
+      "/some/.mcm.json",
+    )
+    const result = listDoctypeFilesAcrossSubcontexts(project, "notes")
+    expect(result).toEqual([])
   })
 })
 

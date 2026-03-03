@@ -7,12 +7,24 @@ import {
   it,
   vi,
 } from "vitest"
-import { cpSync, mkdtempSync, readdirSync, rmSync } from "node:fs"
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import * as cli from "../lib/cli.js"
 import { mockProject } from "../lib/project.test-helpers.js"
 import { computeRenames, parseSeqPrefix, seqfixCommand } from "./seqfix.js"
+
+const multiSubcontextFixture = join(
+  import.meta.dirname,
+  "../../test/fixtures/doctypes/multi-subcontext",
+)
 
 vi.mock("../lib/cli.js")
 vi.mock("../lib/project.js")
@@ -245,6 +257,149 @@ describe("seqfixCommand (dry-run)", () => {
     expect(cli.abortError).toHaveBeenCalledWith(
       expect.stringContaining('"datetime"'),
     )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// seqfixCommand — inSubcontext, dry-run
+// ---------------------------------------------------------------------------
+
+describe("seqfixCommand (inSubcontext, dry-run)", () => {
+  it("shows global renames with paths relative to subcontexts dir", () => {
+    // fixture: 001.feature-a/notes: 001.intro.md, 003.design.md
+    //          002.feature-b/notes: 001.login.md, 002.auth.md
+    // sort: (1,intro), (1,login), (2,auth), (3,design)
+    // renames: 001.login→002, 002.auth→003, 003.design→004
+    mockProject({
+      projectDir: multiSubcontextFixture,
+      currentSubcontext: "001.feature-a",
+      doctypes: {
+        notes: {
+          dir: join(multiSubcontextFixture, "features/001.feature-a/notes"),
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          inSubcontext: true,
+        },
+      },
+      rawConfig: {
+        extend: false,
+        doctypes: {
+          notes: {
+            dir: "notes",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
+        },
+        sync: [],
+        subcontexts: { dir: "features", doctypes: ["notes"] },
+      },
+    })
+
+    seqfixCommand.callback!({
+      _: { doctype: "notes" },
+      flags: { force: false },
+    })
+
+    // Should show full relative path on both sides, e.g.:
+    // 001.feature-a/notes/003.design.md → 001.feature-a/notes/004.design.md
+    expect(cli.info).toHaveBeenCalledWith(
+      "001.feature-a/notes/003.design.md → 001.feature-a/notes/004.design.md",
+    )
+    expect(cli.info).toHaveBeenCalledWith(expect.stringContaining("-f"))
+    expect(cli.success).not.toHaveBeenCalled()
+  })
+
+  it("prints 'Nothing to rename' when all files are already in order globally", () => {
+    mockProject({
+      projectDir: multiSubcontextFixture,
+      currentSubcontext: "001.feature-a",
+      doctypes: {
+        notes: {
+          dir: join(multiSubcontextFixture, "features/001.feature-a/notes"),
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          inSubcontext: true,
+        },
+      },
+      rawConfig: {
+        extend: false,
+        doctypes: {
+          notes: {
+            dir: "notes",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
+        },
+        sync: [],
+        // point to empty subcontexts dir so there are no files at all
+        subcontexts: { dir: "nonexistent-features", doctypes: ["notes"] },
+      },
+    })
+
+    seqfixCommand.callback!({
+      _: { doctype: "notes" },
+      flags: { force: false },
+    })
+
+    expect(cli.info).toHaveBeenCalledWith("Nothing to rename.")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// seqfixCommand — inSubcontext, --force
+// ---------------------------------------------------------------------------
+
+describe("seqfixCommand (inSubcontext, --force)", () => {
+  it("renames files globally across subcontexts", () => {
+    const base = mkdtempSync(join(workspace, "sub-force-run-"))
+    const sub1Notes = join(base, "features/001.feature-a/notes")
+    const sub2Notes = join(base, "features/002.feature-b/notes")
+    mkdirSync(sub1Notes, { recursive: true })
+    mkdirSync(sub2Notes, { recursive: true })
+    writeFileSync(join(sub1Notes, "001.intro.md"), "")
+    writeFileSync(join(sub1Notes, "003.design.md"), "")
+    writeFileSync(join(sub2Notes, "001.login.md"), "")
+    writeFileSync(join(sub2Notes, "002.auth.md"), "")
+
+    mockProject({
+      projectDir: base,
+      currentSubcontext: "001.feature-a",
+      doctypes: {
+        notes: {
+          dir: sub1Notes,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          inSubcontext: true,
+        },
+      },
+      rawConfig: {
+        extend: false,
+        doctypes: {
+          notes: {
+            dir: "notes",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
+        },
+        sync: [],
+        subcontexts: { dir: "features", doctypes: ["notes"] },
+      },
+    })
+
+    seqfixCommand.callback!({ _: { doctype: "notes" }, flags: { force: true } })
+
+    expect(cli.success).toHaveBeenCalledWith(
+      expect.stringContaining("Renamed 3 file(s)"),
+    )
+
+    // sort: (1,intro)→001, (1,login)→002, (2,auth)→003, (3,design)→004
+    expect(readdirSync(sub1Notes).sort()).toContain("001.intro.md")
+    expect(readdirSync(sub1Notes).sort()).toContain("004.design.md")
+    expect(readdirSync(sub1Notes).sort()).not.toContain("003.design.md")
+    expect(readdirSync(sub2Notes).sort()).toContain("002.login.md")
+    expect(readdirSync(sub2Notes).sort()).toContain("003.auth.md")
+    expect(readdirSync(sub2Notes).sort()).not.toContain("001.login.md")
+    expect(readdirSync(sub2Notes).sort()).not.toContain("002.auth.md")
   })
 })
 

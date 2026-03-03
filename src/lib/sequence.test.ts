@@ -1,9 +1,100 @@
 import { readdirSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
-import { formatDatetime, nextFilename, parseMaxSequence } from "./sequence.js"
+import {
+  computeGlobalRenames,
+  formatDatetime,
+  nextFilename,
+  parseMaxSequence,
+} from "./sequence.js"
 
 const fixtureDir = join(import.meta.dirname, "../../test/fixtures/sequence")
+
+describe("computeGlobalRenames", () => {
+  const opts = { sequenceScheme: "000", sequenceSeparator: "." }
+
+  it("assigns globally consecutive numbers across dirs", () => {
+    const entries = [
+      {
+        dir: "/proj/features/001.sub-a/notes",
+        files: ["001.intro.md", "003.design.md"],
+      },
+      {
+        dir: "/proj/features/002.sub-b/notes",
+        files: ["001.login.md", "002.auth.md"],
+      },
+    ]
+    const renames = computeGlobalRenames(entries, opts)
+    // Sort order: (1, intro), (1, login), (2, auth), (3, design)
+    // → 001.intro stays, 001.login→002, 002.auth→003, 003.design→004
+    expect(renames).toContainEqual({
+      dir: "/proj/features/002.sub-b/notes",
+      from: "001.login.md",
+      to: "002.login.md",
+    })
+    expect(renames).toContainEqual({
+      dir: "/proj/features/002.sub-b/notes",
+      from: "002.auth.md",
+      to: "003.auth.md",
+    })
+    expect(renames).toContainEqual({
+      dir: "/proj/features/001.sub-a/notes",
+      from: "003.design.md",
+      to: "004.design.md",
+    })
+    expect(renames).not.toContainEqual(
+      expect.objectContaining({ from: "001.intro.md" }),
+    )
+    expect(renames).toHaveLength(3)
+  })
+
+  it("sorts cross-dir by (seq, slug)", () => {
+    const entries = [
+      { dir: "/dir/b", files: ["001.banana.md"] },
+      { dir: "/dir/a", files: ["001.apple.md"] },
+    ]
+    const renames = computeGlobalRenames(entries, opts)
+    // apple < banana alphabetically, so apple gets pos 1 (no change), banana gets pos 2
+    expect(renames).toContainEqual({
+      dir: "/dir/b",
+      from: "001.banana.md",
+      to: "002.banana.md",
+    })
+    expect(renames).not.toContainEqual(
+      expect.objectContaining({ from: "001.apple.md" }),
+    )
+  })
+
+  it("skips non-sequenced files", () => {
+    const entries = [
+      { dir: "/dir/a", files: ["readme.md", "001.note.md"] },
+      { dir: "/dir/b", files: ["002.other.md"] },
+    ]
+    const renames = computeGlobalRenames(entries, opts)
+    expect(renames.every((r) => r.from !== "readme.md")).toBe(true)
+    expect(renames.every((r) => r.to !== "readme.md")).toBe(true)
+  })
+
+  it("returns empty array when no renames needed", () => {
+    const entries = [
+      { dir: "/dir/a", files: ["001.first.md"] },
+      { dir: "/dir/b", files: ["002.second.md"] },
+    ]
+    expect(computeGlobalRenames(entries, opts)).toEqual([])
+  })
+
+  it("handles empty entries array", () => {
+    expect(computeGlobalRenames([], opts)).toEqual([])
+  })
+
+  it("handles entries with empty file lists", () => {
+    const entries = [
+      { dir: "/dir/a", files: ["001.note.md"] },
+      { dir: "/dir/b", files: [] },
+    ]
+    expect(computeGlobalRenames(entries, opts)).toEqual([])
+  })
+})
 
 describe("formatDatetime", () => {
   it("formats a date as YYYYMMDDHHmmss", () => {
