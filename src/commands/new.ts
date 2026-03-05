@@ -1,5 +1,6 @@
 import { command } from "cleye"
 import { existsSync, mkdirSync } from "node:fs"
+import { spawnSync } from "node:child_process"
 import { writeFileSyncOrAbort } from "../lib/fs.js"
 import { join } from "node:path"
 import * as cli from "../lib/cli.js"
@@ -11,6 +12,14 @@ import { toDisplayPath } from "../lib/paths.js"
 import { nextFilename } from "../lib/sequence.js"
 import { slugify } from "../lib/slugify.js"
 
+export function resolveEditor(): string | undefined {
+  if (process.env.MCM_EDITOR) return process.env.MCM_EDITOR
+  if (process.env.EDITOR) return process.env.EDITOR
+  if (process.platform === "darwin") return "open"
+  if (process.platform === "win32") return "start"
+  return "xdg-open"
+}
+
 export const newCommand = command(
   {
     name: "new",
@@ -20,6 +29,13 @@ export const newCommand = command(
       sub: {
         type: String,
         description: "Use a specific subcontext",
+      },
+      open: {
+        type: Boolean,
+        alias: "o",
+        description:
+          "Open the created file with $MCM_EDITOR, $EDITOR, or xdg-open",
+        default: false,
       },
     },
   },
@@ -55,6 +71,13 @@ export const newCommand = command(
 
     writeFileSyncOrAbort(fullPath, `# ${titleWords.join(" ")}\n`)
     cli.writeln(toDisplayPath(fullPath, process.cwd()))
+
+    if (argv.flags?.open) {
+      const editor = resolveEditor()
+      if (editor) {
+        spawnSync(editor, [fullPath], { stdio: "inherit" })
+      }
+    }
   },
 )
 

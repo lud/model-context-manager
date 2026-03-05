@@ -10,11 +10,12 @@ import {
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import * as cli from "../lib/cli.js"
-import { newCommand } from "./new.js"
+import { newCommand, resolveEditor } from "./new.js"
 import { mockProject } from "../lib/project.test-helpers.js"
 
 vi.mock("../lib/cli.js")
 vi.mock("../lib/project.js")
+vi.mock("node:child_process")
 
 let tempDir: string
 
@@ -28,6 +29,30 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true })
   vi.resetAllMocks()
+})
+
+describe("resolveEditor", () => {
+  const originalEnv = process.env
+
+  afterEach(() => {
+    process.env = originalEnv
+  })
+
+  it("prefers MCM_EDITOR over EDITOR", () => {
+    process.env = { ...originalEnv, MCM_EDITOR: "nvim", EDITOR: "vim" }
+    expect(resolveEditor()).toBe("nvim")
+  })
+
+  it("falls back to EDITOR when MCM_EDITOR is not set", () => {
+    process.env = { ...originalEnv, MCM_EDITOR: "", EDITOR: "vim" }
+    expect(resolveEditor()).toBe("vim")
+  })
+
+  it("falls back to platform default when no editor env vars are set", () => {
+    process.env = { ...originalEnv, MCM_EDITOR: "", EDITOR: "" }
+    const editor = resolveEditor()
+    expect(["xdg-open", "open", "start"]).toContain(editor)
+  })
 })
 
 describe("newCommand", () => {
@@ -180,6 +205,55 @@ describe("newCommand", () => {
     } finally {
       rmSync(base, { recursive: true, force: true })
     }
+  })
+
+  describe("--open flag", () => {
+    it("spawns editor with file path when --open is set", async () => {
+      const { spawnSync } = await import("node:child_process")
+
+      mockProject({
+        doctypes: {
+          notes: {
+            dir: tempDir,
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+            inSubcontext: false,
+          },
+        },
+      })
+
+      newCommand.callback!({
+        _: { doctype: "notes", title: ["Open", "Me"] },
+        flags: { open: true },
+      })
+
+      expect(spawnSync).toHaveBeenCalledWith(
+        expect.any(String),
+        [expect.stringContaining("001.open-me.md")],
+        { stdio: "inherit" },
+      )
+    })
+
+    it("does not spawn editor when --open is not set", async () => {
+      const { spawnSync } = await import("node:child_process")
+
+      mockProject({
+        doctypes: {
+          notes: {
+            dir: tempDir,
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+            inSubcontext: false,
+          },
+        },
+      })
+
+      newCommand.callback!({
+        _: { doctype: "notes", title: ["No", "Open"] },
+      })
+
+      expect(spawnSync).not.toHaveBeenCalled()
+    })
   })
 
   it("aborts when managed doctype used without subcontext", () => {
