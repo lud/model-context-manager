@@ -38,6 +38,14 @@ const DoctypeValueSchema = z
       .describe(
         "Separator between the sequence number and the slug in generated filenames.",
       ),
+    defaultProperties: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe(
+        "Properties to use as frontmatter when creating new files. " +
+          "If omitted, defaults to { created_on: '{{date}}', status: 'open' }. " +
+          "An explicit empty object {} disables default properties.",
+      ),
   })
   .describe("Configuration for a single doctype.")
 

@@ -1,5 +1,5 @@
 import { cli as cleyeCLI } from "cleye"
-import { demoCommand } from "./commands/demo.js"
+import { closeCommand } from "./commands/close.js"
 import { initCommand } from "./commands/init.js"
 import { listCommand } from "./commands/list.js"
 import { newCommand } from "./commands/new.js"
@@ -14,15 +14,15 @@ const argv = cleyeCLI({
   name: "mcm",
   version: "0.1.0",
   commands: [
-    demoCommand,
     initCommand,
     listCommand,
     newCommand,
     nextCommand,
-    seqfixCommand,
+    closeCommand,
     subCommand,
-    syncCommand,
+    seqfixCommand,
     whichCommand,
+    syncCommand,
   ],
   strictFlags: true,
 })

@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process"
 import { writeFileSyncOrAbort } from "../lib/fs.js"
 import { join } from "node:path"
 import * as cli from "../lib/cli.js"
+import { applyTemplates, prependFrontmatter } from "../lib/frontmatter.js"
 import {
   getProject,
   listDoctypeFilesAcrossSubcontexts,
@@ -69,7 +70,34 @@ export const newCommand = command(
       cli.abortError(`File already exists: ${fullPath}`)
     }
 
-    writeFileSyncOrAbort(fullPath, `# ${titleWords.join(" ")}\n`)
+    const BUILT_IN_DEFAULT = { created_on: "{{date}}", status: "open" }
+    const rawProperties =
+      entry.defaultProperties !== undefined
+        ? entry.defaultProperties
+        : BUILT_IN_DEFAULT
+
+    const title = titleWords.join(" ")
+    const context = {
+      date: new Date().toISOString().slice(0, 10),
+      title,
+      slug,
+      doctype,
+    }
+
+    let properties = applyTemplates(rawProperties, context) as Record<
+      string,
+      unknown
+    >
+    const markdownBody = `# ${title}\n`
+
+    if (Object.keys(properties).length === 0) {
+      cli.warning(
+        `No frontmatter properties configured for doctype "${doctype}". Adding "title" to avoid breaking markdown handlers.`,
+      )
+      properties = { title }
+    }
+
+    writeFileSyncOrAbort(fullPath, prependFrontmatter(properties, markdownBody))
     cli.writeln(toDisplayPath(fullPath, process.cwd()))
 
     if (argv.flags?.open) {

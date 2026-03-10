@@ -18,9 +18,6 @@ format:
 typecheck:
   npm run typecheck
 
-demo:
-  npx tsx src/main.ts demo Foo
-
 schema:
   npx tsx tools/build-json-schema.ts
 

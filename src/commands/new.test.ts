@@ -56,7 +56,7 @@ describe("resolveEditor", () => {
 })
 
 describe("newCommand", () => {
-  it("creates a file with markdown heading", () => {
+  it("creates a file with frontmatter and markdown heading", () => {
     mockProject({
       doctypes: {
         notes: {
@@ -77,7 +77,9 @@ describe("newCommand", () => {
     )
 
     const content = readFileSync(join(tempDir, "001.my-first-note.md"), "utf-8")
-    expect(content).toBe("# My First Note\n")
+    expect(content).toContain("created_on:")
+    expect(content).toContain("status: open")
+    expect(content).toContain("# My First Note\n")
   })
 
   it("creates file with none scheme", () => {
@@ -99,7 +101,91 @@ describe("newCommand", () => {
     )
 
     const content = readFileSync(join(tempDir, "simple-doc.md"), "utf-8")
-    expect(content).toBe("# Simple Doc\n")
+    expect(content).toContain("status: open")
+    expect(content).toContain("# Simple Doc\n")
+  })
+
+  it("uses built-in default frontmatter when defaultProperties not configured", () => {
+    mockProject({
+      doctypes: {
+        notes: {
+          dir: tempDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          inSubcontext: false,
+        },
+      },
+    })
+
+    newCommand.callback!({ _: { doctype: "notes", title: ["Hello", "World"] } })
+
+    const content = readFileSync(join(tempDir, "001.hello-world.md"), "utf-8")
+    expect(content).toMatch(/created_on: \d{4}-\d{2}-\d{2}/)
+    expect(content).toContain("status: open")
+    expect(content).toContain("# Hello World\n")
+  })
+
+  it("uses custom defaultProperties when configured", () => {
+    mockProject({
+      doctypes: {
+        notes: {
+          dir: tempDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          inSubcontext: false,
+          defaultProperties: { priority: "high" },
+        },
+      },
+    })
+
+    newCommand.callback!({ _: { doctype: "notes", title: ["Custom"] } })
+
+    const content = readFileSync(join(tempDir, "001.custom.md"), "utf-8")
+    expect(content).toContain("priority: high")
+    expect(content).not.toContain("created_on")
+    expect(content).not.toContain("status:")
+  })
+
+  it("warns and uses title fallback when defaultProperties is empty object", () => {
+    mockProject({
+      doctypes: {
+        notes: {
+          dir: tempDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          inSubcontext: false,
+          defaultProperties: {},
+        },
+      },
+    })
+
+    newCommand.callback!({ _: { doctype: "notes", title: ["Empty", "Props"] } })
+
+    expect(cli.warning).toHaveBeenCalledWith(
+      expect.stringContaining('No frontmatter properties configured for doctype "notes"'),
+    )
+    const content = readFileSync(join(tempDir, "001.empty-props.md"), "utf-8")
+    expect(content).toContain("title: Empty Props")
+  })
+
+  it("replaces {{date}} and {{title}} templates in defaultProperties", () => {
+    mockProject({
+      doctypes: {
+        notes: {
+          dir: tempDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          inSubcontext: false,
+          defaultProperties: { created_on: "{{date}}", label: "{{title}}" },
+        },
+      },
+    })
+
+    newCommand.callback!({ _: { doctype: "notes", title: ["Template", "Test"] } })
+
+    const content = readFileSync(join(tempDir, "001.template-test.md"), "utf-8")
+    expect(content).toMatch(/created_on: \d{4}-\d{2}-\d{2}/)
+    expect(content).toContain("label: Template Test")
   })
 
   it("aborts on file collision", () => {
