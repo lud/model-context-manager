@@ -1,10 +1,6 @@
 {
   "$schema": "./resources/mcm-project.schema.json",
-  "doctypes": {
-    "devlogs": {
-      "dir": "context/devlogs"
-    }
-  },
+  "doctypes": {},
   "sync": [
     {
       "local": "AGENTS.md",

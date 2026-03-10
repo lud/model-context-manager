@@ -1,6 +1,6 @@
 default: test
 
-install: build
+install: build schema
   cp dist/mcm ~/.local/bin/mcm
 
 uninstall:
@@ -23,6 +23,7 @@ demo:
 
 schema:
   npx tsx tools/build-json-schema.ts
+
 
 site:
   npx tsx tools/build-site.ts

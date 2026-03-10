@@ -44,10 +44,10 @@ Use these functions for all output in day-to-day commands:
 
 Use these wrappers instead of calling `node:fs` directly in commands. They call `abortError` with a human-readable message on failure.
 
-| Function                        | Wraps              |
-| ------------------------------- | ------------------ |
-| `readdirSyncOrAbort(path)`      | `readdirSync`      |
-| `readFileSyncOrAbort(path)`     | `readFileSync`     |
+| Function                           | Wraps           |
+| ---------------------------------- | --------------- |
+| `readdirSyncOrAbort(path)`         | `readdirSync`   |
+| `readFileSyncOrAbort(path)`        | `readFileSync`  |
 | `writeFileSyncOrAbort(path, data)` | `writeFileSync` |
 
 ## Project system (`src/lib/project.ts`)
@@ -85,14 +85,4 @@ vi.mocked(cli.abort).mockImplementation(() => { throw new Error("abort") })
 ```
 
 **Fixtures** in `test/fixtures/` are real files on disk. Prefer them over mocking `fs` or creating tmp directories.
-
-## Devlogs
-
-After finishing a feature or implementing a plan, create a devlog entry:
-
-```bash
-npx tsx /home/lud/src/mcm/src/main.ts next devlogs "title of the change"
-```
-
-This prints the path for the next devlog file. Create that file with a short summary of what was changed and why.
 
