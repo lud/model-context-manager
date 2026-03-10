@@ -137,11 +137,12 @@ describe("newCommand", () => {
     expect(cli.abortError).toHaveBeenCalledWith("Unknown doctype: unknown")
   })
 
-  it("aborts when directory does not exist", () => {
+  it("creates directory if it does not exist", () => {
+    const newDir = join(tempDir, "nested", "notes")
     mockProject({
       doctypes: {
         notes: {
-          dir: "/nonexistent/path",
+          dir: newDir,
           sequenceScheme: "000",
           sequenceSeparator: ".",
           inSubcontext: false,
@@ -149,13 +150,10 @@ describe("newCommand", () => {
       },
     })
 
-    expect(() =>
-      newCommand.callback!({ _: { doctype: "notes", title: ["Test"] } }),
-    ).toThrow("abortError")
+    newCommand.callback!({ _: { doctype: "notes", title: ["Test"] } })
 
-    expect(cli.abortError).toHaveBeenCalledWith(
-      "Directory does not exist: /nonexistent/path",
-    )
+    expect(existsSync(newDir)).toBe(true)
+    expect(existsSync(join(newDir, "001.test.md"))).toBe(true)
   })
 
   it("uses global max sequence across all subcontexts", () => {

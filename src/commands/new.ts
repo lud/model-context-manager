@@ -56,7 +56,7 @@ export const newCommand = command(
     }
 
     if (!existsSync(entry.dir)) {
-      cli.abortError(`Directory does not exist: ${entry.dir}`)
+      mkdirSync(entry.dir, { recursive: true })
     }
 
     const slug = slugify(titleWords.join(" "))
