@@ -6,12 +6,12 @@ import * as p from "@clack/prompts"
 import * as fs from "../lib/fs.js"
 import * as project from "../lib/project.js"
 import {
-  TEMPLATES,
   buildDoctypeConfig,
   configToJson,
   mergeConfigs,
   runInit,
 } from "./init.js"
+import { getTemplates } from "../lib/templates.js"
 import { SCHEMA_URL } from "../lib/schema-url.js"
 
 vi.mock("@clack/prompts")
@@ -19,11 +19,9 @@ vi.mock("../lib/fs.js")
 vi.mock("../lib/project.js")
 
 let tempDir: string
-let originalCwd: string
 
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), "mcm-init-test-"))
-  originalCwd = process.cwd()
   vi.spyOn(process, "cwd").mockReturnValue(tempDir)
   vi.mocked(project.locateProjectFile).mockReturnValue(null)
   vi.mocked(fs.writeFileSyncOrAbort).mockReturnValue(undefined)
@@ -40,12 +38,23 @@ function writeProjectFile(content: object) {
   writeFileSync(join(tempDir, ".mcm.json"), JSON.stringify(content))
 }
 
-describe("TEMPLATES", () => {
-  it("has blank, notes, and dev-project templates", () => {
-    const ids = TEMPLATES.map((t) => t.id)
-    expect(ids).toContain("blank")
+describe("getTemplates", () => {
+  it("includes notes and feature-project templates", () => {
+    const ids = getTemplates().map((t) => t.id)
     expect(ids).toContain("notes")
-    expect(ids).toContain("dev-project")
+    expect(ids).toContain("feature-project")
+  })
+
+  it("does not include a blank template", () => {
+    const ids = getTemplates().map((t) => t.id)
+    expect(ids).not.toContain("blank")
+  })
+
+  it("feature-project template has subcontexts with specs and tasks", () => {
+    const tmpl = getTemplates().find((t) => t.id === "feature-project")!
+    expect(tmpl.config.subcontexts?.dir).toBe("features")
+    expect(tmpl.config.subcontexts?.doctypes).toContain("specs")
+    expect(tmpl.config.subcontexts?.doctypes).toContain("tasks")
   })
 })
 
@@ -127,10 +136,17 @@ describe("configToJson", () => {
     expect(parsed.subcontexts).toEqual({ dir: "features", doctypes: ["notes"] })
   })
 
-  it("blank template produces just $schema", () => {
-    const json = configToJson({})
+  it("includes sync when non-empty", () => {
+    const sync = [{ upstream: "other/path", local: "local/path", mode: "receive_merge" as const }]
+    const json = configToJson({ sync })
     const parsed = JSON.parse(json)
-    expect(Object.keys(parsed)).toEqual(["$schema"])
+    expect(parsed.sync).toEqual(sync)
+  })
+
+  it("omits sync when empty array", () => {
+    const json = configToJson({ sync: [] })
+    const parsed = JSON.parse(json)
+    expect(parsed.sync).toBeUndefined()
   })
 })
 
@@ -151,33 +167,28 @@ describe("runInit — template path", () => {
     expect(p.outro).toHaveBeenCalledWith("Created .mcm.json")
   })
 
-  it("applies blank template and writes only $schema", async () => {
-    vi.mocked(p.select).mockResolvedValueOnce("blank")
-
-    await runInit()
-
-    const [, content] = vi.mocked(fs.writeFileSyncOrAbort).mock.calls[0]
-    const parsed = JSON.parse(content as string)
-    expect(Object.keys(parsed)).toEqual(["$schema"])
-  })
-
-  it("applies dev-project template with subcontexts", async () => {
-    vi.mocked(p.select).mockResolvedValueOnce("dev-project")
+  it("applies feature-project template with subcontexts and adr", async () => {
+    vi.mocked(p.select).mockResolvedValueOnce("feature-project")
 
     await runInit()
 
     const [, content] = vi.mocked(fs.writeFileSyncOrAbort).mock.calls[0]
     const parsed = JSON.parse(content as string)
     expect(parsed.subcontexts).toBeDefined()
-    expect(parsed.doctypes.devlogs).toBeDefined()
-    expect(parsed.doctypes.decisions).toBeDefined()
+    expect(parsed.doctypes.adr).toBeDefined()
+    expect(parsed.doctypes.specs).toBeDefined()
+    expect(parsed.doctypes.tasks).toBeDefined()
   })
 })
 
 describe("runInit — custom path", () => {
   beforeEach(() => {
     vi.mocked(p.select).mockResolvedValueOnce("custom")
-    vi.mocked(p.confirm).mockResolvedValue(false) // no subcontexts by default
+    vi.mocked(project.parseProject).mockReturnValue({
+      extend: false,
+      doctypes: {},
+      sync: [],
+    })
   })
 
   it("builds config from prompts and writes file", async () => {
@@ -203,9 +214,6 @@ describe("runInit — custom path", () => {
   })
 
   it("adds subcontext config when user enables subcontexts", async () => {
-    // Reset the default "no subcontexts" mock
-    vi.mocked(p.confirm).mockReset()
-
     // use subcontexts: yes
     vi.mocked(p.confirm).mockResolvedValueOnce(true)
     // subcontexts dir
@@ -233,16 +241,20 @@ describe("runInit — custom path", () => {
 })
 
 describe("runInit — CWD conflict (existing .mcm.json)", () => {
+  const existingRaw = {
+    $schema: SCHEMA_URL,
+    doctypes: { existing: { dir: "existing" } },
+    sync: [{ upstream: "other/.mcm.json", local: ".mcm.json", mode: "receive_merge" }],
+  }
+
   beforeEach(() => {
-    // Make existsSync see the config file by writing it to tempDir
-    writeProjectFile({ doctypes: { existing: { dir: "existing" } } })
-    // Make locateProjectFile return the existing file
+    writeProjectFile(existingRaw)
     vi.mocked(project.locateProjectFile).mockReturnValue(join(tempDir, ".mcm.json"))
-    vi.mocked(project.loadJSONFile).mockReturnValue({ doctypes: { existing: { dir: "existing" } } })
+    vi.mocked(project.loadJSONFile).mockReturnValue(existingRaw)
     vi.mocked(project.parseProject).mockReturnValue({
       extend: false,
       doctypes: { existing: { dir: "existing", sequenceScheme: "000", sequenceSeparator: "." } },
-      sync: [],
+      sync: [{ upstream: "other/.mcm.json", local: ".mcm.json", mode: "receive_merge" }],
     })
   })
 
@@ -293,8 +305,50 @@ describe("runInit — CWD conflict (existing .mcm.json)", () => {
 
     const [, content] = vi.mocked(fs.writeFileSyncOrAbort).mock.calls[0]
     const parsed = JSON.parse(content as string)
+    expect(parsed.doctypes.existing).toBeDefined()
     expect(parsed.doctypes.decisions).toBeDefined()
     expect(p.outro).toHaveBeenCalledWith("Updated .mcm.json")
+  })
+
+  it("update preserves sync and all other fields", async () => {
+    // select update; no new doctypes
+    vi.mocked(p.select).mockResolvedValueOnce("update")
+    vi.mocked(p.confirm).mockResolvedValueOnce(false) // no subcontexts
+    vi.mocked(p.confirm).mockResolvedValueOnce(false) // no add doctype
+
+    await runInit()
+
+    const [, content] = vi.mocked(fs.writeFileSyncOrAbort).mock.calls[0]
+    const parsed = JSON.parse(content as string)
+    expect(parsed.sync).toEqual(existingRaw.sync)
+    expect(parsed.doctypes.existing).toBeDefined()
+  })
+
+  it("update rejects adding a doctype that already exists", async () => {
+    // select update
+    vi.mocked(p.select).mockResolvedValueOnce("update")
+    vi.mocked(p.confirm).mockResolvedValueOnce(false) // no subcontexts
+    vi.mocked(p.confirm).mockResolvedValueOnce(true) // add a doctype
+
+    // Capture the validate function from p.text
+    let validateFn: ((v: string) => string | undefined) | undefined
+    vi.mocked(p.text).mockImplementationOnce(async (opts) => {
+      validateFn = opts.validate as (v: string) => string | undefined
+      return "decisions"
+    })
+    // dir
+    vi.mocked(p.text).mockResolvedValueOnce("decisions")
+    // scheme
+    vi.mocked(p.select).mockResolvedValueOnce("000")
+    // add another: no
+    vi.mocked(p.confirm).mockResolvedValueOnce(false)
+
+    await runInit()
+
+    // "existing" is already in the config — validate should reject it
+    expect(validateFn?.("existing")).toMatch(/already exists/)
+    // an unrelated new name is fine
+    expect(validateFn?.("something-else")).toBeUndefined()
   })
 })
 
@@ -315,10 +369,11 @@ describe("runInit — parent config warning", () => {
   it("confirm yes proceeds to init flow", async () => {
     vi.mocked(project.locateProjectFile).mockReturnValue("/parent/.mcm.json")
     vi.mocked(p.confirm).mockResolvedValueOnce(true)
+    vi.mocked(project.parseProject).mockReturnValue({ extend: false, doctypes: {}, sync: [] })
     // start choice: template
     vi.mocked(p.select).mockResolvedValueOnce("template")
-    // template: blank
-    vi.mocked(p.select).mockResolvedValueOnce("blank")
+    // template: notes
+    vi.mocked(p.select).mockResolvedValueOnce("notes")
 
     await runInit()
 

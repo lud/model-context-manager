@@ -5,57 +5,12 @@ import { join, resolve } from "node:path"
 import { writeFileSyncOrAbort } from "../lib/fs.js"
 import { locateProjectFile, loadJSONFile, parseProject } from "../lib/project.js"
 import { SCHEMA_URL } from "../lib/schema-url.js"
+import type { RawConfig, RawDoctypeEntry, RawSubcontexts } from "../lib/raw-config.js"
+import { getTemplates } from "../lib/templates.js"
+
+export type { RawConfig, RawDoctypeEntry, RawSubcontexts }
 
 export type SequenceScheme = "000" | "datetime" | "none"
-
-export type RawDoctypeEntry = {
-  dir: string
-  sequenceScheme?: string
-  sequenceSeparator?: string
-}
-
-export type RawSubcontexts = {
-  dir: string
-  doctypes: string[]
-}
-
-export type RawConfig = {
-  $schema?: string
-  doctypes?: Record<string, RawDoctypeEntry>
-  subcontexts?: RawSubcontexts
-}
-
-export const TEMPLATES: Array<{
-  id: string
-  label: string
-  hint: string
-  config: RawConfig
-}> = [
-  {
-    id: "blank",
-    label: "Blank",
-    hint: "Empty file — fill in manually",
-    config: {},
-  },
-  {
-    id: "notes",
-    label: "Notes",
-    hint: "A single notes doctype",
-    config: { doctypes: { notes: { dir: "notes" } } },
-  },
-  {
-    id: "dev-project",
-    label: "Dev project",
-    hint: "Devlogs + decisions, with subcontexts per feature",
-    config: {
-      doctypes: {
-        devlogs: { dir: "context/devlogs" },
-        decisions: { dir: "context/decisions" },
-      },
-      subcontexts: { dir: "features", doctypes: ["devlogs", "decisions"] },
-    },
-  },
-]
 
 export function buildDoctypeConfig(
   name: string,
@@ -97,6 +52,10 @@ export function configToJson(config: RawConfig): string {
     output.doctypes = cleanDoctypes
   }
 
+  if (config.sync && config.sync.length > 0) {
+    output.sync = config.sync
+  }
+
   if (config.subcontexts) {
     output.subcontexts = config.subcontexts
   }
@@ -112,20 +71,22 @@ function cancelAndExit(): never {
 }
 
 async function runTemplateFlow(configPath: string): Promise<void> {
+  const templates = getTemplates()
   const templateId = await p.select({
     message: "Pick a template",
-    options: TEMPLATES.map((t) => ({ value: t.id, label: t.label, hint: t.hint })),
+    options: templates.map((t) => ({ value: t.id, label: t.label, hint: t.hint })),
   })
 
   if (p.isCancel(templateId)) cancelAndExit()
 
-  const template = TEMPLATES.find((t) => t.id === templateId)!
+  const template = templates.find((t) => t.id === templateId)!
   writeFileSyncOrAbort(configPath, configToJson(template.config))
   p.outro("Created .mcm.json")
 }
 
 export async function promptDoctype(
   subcontextsDir: string | undefined,
+  existingNames?: Set<string>,
 ): Promise<{ name: string; entry: RawDoctypeEntry; managedBySubcontext: boolean }> {
   const name = await p.text({
     message: "Doctype name",
@@ -133,6 +94,9 @@ export async function promptDoctype(
       if (!value.trim()) return "Name is required"
       if (!/^[A-Za-z0-9._-]+$/.test(value.trim())) {
         return "Only letters, digits, dots, hyphens, and underscores are allowed"
+      }
+      if (existingNames?.has(value.trim())) {
+        return `Doctype "${value.trim()}" already exists`
       }
     },
   })
@@ -186,15 +150,21 @@ export async function promptDoctype(
   return { name: doctypeName, entry: buildDoctypeConfig(doctypeName, dirValue, scheme), managedBySubcontext }
 }
 
+/**
+ * Prompts the user to configure doctypes and subcontexts, then patches `baseJson` in place
+ * and writes it to `configPath`. For a fresh config, pass `{ $schema: SCHEMA_URL }` as the
+ * base. For an update, pass the existing raw JSON — all other fields are preserved unchanged.
+ */
 async function runCustomFlow(
   configPath: string,
-  existingConfig: RawConfig,
+  baseJson: Record<string, unknown>,
+  existingDoctypes: Record<string, unknown>,
+  existingSubcontexts: { dir: string; doctypes: string[] } | undefined,
   updateMode: boolean,
 ): Promise<void> {
-  const existingHasSubcontexts = Boolean(existingConfig.subcontexts)
-  let subcontextsDir: string | undefined = existingConfig.subcontexts?.dir
+  let subcontextsDir: string | undefined = existingSubcontexts?.dir
 
-  if (!existingHasSubcontexts) {
+  if (!existingSubcontexts) {
     const useSubcontexts = await p.confirm({
       message: "Use subcontexts?",
       initialValue: false,
@@ -212,6 +182,7 @@ async function runCustomFlow(
     }
   }
 
+  const existingNames = new Set(Object.keys(existingDoctypes))
   const newDoctypes: Record<string, RawDoctypeEntry> = {}
   const subcontextManagedDoctypes: string[] = []
 
@@ -219,8 +190,9 @@ async function runCustomFlow(
   if (p.isCancel(addDoctype)) cancelAndExit()
 
   while (addDoctype) {
-    const { name, entry, managedBySubcontext } = await promptDoctype(subcontextsDir)
+    const { name, entry, managedBySubcontext } = await promptDoctype(subcontextsDir, existingNames)
     newDoctypes[name] = entry
+    existingNames.add(name)
     if (managedBySubcontext) subcontextManagedDoctypes.push(name)
 
     const another = await p.confirm({ message: "Add another doctype?", initialValue: false })
@@ -228,19 +200,20 @@ async function runCustomFlow(
     addDoctype = another
   }
 
-  const patchConfig: RawConfig = { doctypes: newDoctypes }
+  // Patch only what changed; everything else in baseJson is preserved as-is.
+  if (Object.keys(newDoctypes).length > 0) {
+    baseJson.doctypes = { ...existingDoctypes, ...newDoctypes }
+  }
 
   if (subcontextsDir && subcontextManagedDoctypes.length > 0) {
-    const existingManaged = existingConfig.subcontexts?.doctypes ?? []
-    patchConfig.subcontexts = {
+    const existingManaged = existingSubcontexts?.doctypes ?? []
+    baseJson.subcontexts = {
       dir: subcontextsDir,
       doctypes: [...existingManaged, ...subcontextManagedDoctypes],
     }
   }
 
-  const finalConfig = updateMode ? mergeConfigs(existingConfig, patchConfig) : patchConfig
-
-  writeFileSyncOrAbort(configPath, configToJson(finalConfig))
+  writeFileSyncOrAbort(configPath, JSON.stringify(baseJson, null, 2))
   p.outro(updateMode ? "Updated .mcm.json" : "Created .mcm.json")
 }
 
@@ -251,7 +224,7 @@ export async function runInit(): Promise<void> {
   const configPath = join(cwd, ".mcm.json")
 
   let updateMode = false
-  let existingConfig: RawConfig = {}
+  let baseJson: Record<string, unknown> = { $schema: SCHEMA_URL }
 
   if (existsSync(configPath)) {
     const choice = await p.select({
@@ -268,14 +241,9 @@ export async function runInit(): Promise<void> {
     if (choice === "update") {
       updateMode = true
       try {
-        const raw = loadJSONFile(configPath)
-        const parsed = parseProject(raw)
-        existingConfig = {
-          doctypes: parsed.doctypes as unknown as Record<string, RawDoctypeEntry>,
-          subcontexts: parsed.subcontexts,
-        }
+        baseJson = loadJSONFile(configPath) as Record<string, unknown>
       } catch {
-        existingConfig = {}
+        baseJson = { $schema: SCHEMA_URL }
       }
     }
   } else {
@@ -307,7 +275,19 @@ export async function runInit(): Promise<void> {
     }
   }
 
-  await runCustomFlow(configPath, existingConfig, updateMode)
+  // Extract existing doctypes/subcontexts from baseJson for conflict detection and subcontext merging.
+  // We parse through Zod to get normalized values; fall back to empty on error.
+  let existingDoctypes: Record<string, unknown> = {}
+  let existingSubcontexts: { dir: string; doctypes: string[] } | undefined
+  try {
+    const parsed = parseProject(baseJson)
+    existingDoctypes = parsed.doctypes as unknown as Record<string, unknown>
+    existingSubcontexts = parsed.subcontexts
+  } catch {
+    // leave defaults
+  }
+
+  await runCustomFlow(configPath, baseJson, existingDoctypes, existingSubcontexts, updateMode)
 }
 
 export const initCommand = command(
