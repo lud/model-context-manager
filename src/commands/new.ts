@@ -18,7 +18,7 @@ import { slugify } from "../lib/slugify.js"
 import { listSubcontexts, nextSubcontextDirName } from "../lib/subcontext.js"
 import { setCurrentSubcontext } from "../lib/global-config.js"
 
-export function resolveEditor(): string | undefined {
+export function resolveEditor (): string | undefined {
   if (process.env.MCM_EDITOR) return process.env.MCM_EDITOR
   if (process.env.EDITOR) return process.env.EDITOR
   if (process.platform === "darwin") return "open"
@@ -29,10 +29,10 @@ export function resolveEditor(): string | undefined {
 type NewFileTarget = {
   filePath: string
   warnOnEmptyProperties: boolean
-  afterWrite?: () => void
+  subcontextDirName?: string
 }
 
-function resolveNewFileTarget(
+function resolveNewFileTarget (
   project: ResolvedProject,
   entry: ResolvedDoctypeEntry,
   doctype: string,
@@ -47,7 +47,7 @@ function resolveNewFileTarget(
   }
 }
 
-function resolveSubcontextTarget(
+function resolveSubcontextTarget (
   project: ResolvedProject,
   entry: ResolvedDoctypeEntry,
   slug: string,
@@ -72,11 +72,11 @@ function resolveSubcontextTarget(
   return {
     filePath: join(subcontextPath, `${dirName}.md`),
     warnOnEmptyProperties: false,
-    afterWrite: () => setCurrentSubcontext(project.projectDir, dirName),
+    subcontextDirName: dirName,
   }
 }
 
-function resolveFileTarget(
+function resolveFileTarget (
   project: ResolvedProject,
   entry: ResolvedDoctypeEntry,
   doctype: string,
@@ -115,6 +115,12 @@ export const newCommand = command(
         alias: "o",
         description:
           "Open the created file with $MCM_EDITOR, $EDITOR, or xdg-open",
+        default: false,
+      },
+      switch: {
+        type: Boolean,
+        alias: "s",
+        description: "Switch to the newly created subcontext",
         default: false,
       },
     },
@@ -171,9 +177,15 @@ export const newCommand = command(
       prependFrontmatter(properties, markdownBody),
     )
 
-    target.afterWrite?.()
-
     cli.writeln(toDisplayPath(target.filePath, process.cwd()))
+
+    if (argv.flags?.switch) {
+      if (target.subcontextDirName) {
+        setCurrentSubcontext(project.projectDir, target.subcontextDirName)
+      } else {
+        cli.warning("Cannot honor --switch option, not a subcontext doctype.")
+      }
+    }
 
     if (argv.flags?.open) {
       const editor = resolveEditor()
@@ -195,4 +207,4 @@ export const newCommand = command(
  * mcm new features "add auth"
  * ```
  */
-export function commentDoc() {}
+export function commentDoc () { }

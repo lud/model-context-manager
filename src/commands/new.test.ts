@@ -400,7 +400,7 @@ describe("newCommand", () => {
 })
 
 describe("newCommand — subcontext doctype", () => {
-  it("creates subcontext dir + brief + managed subdirs and switches context", () => {
+  it("creates subcontext dir + brief + managed subdirs without switching", () => {
     const featuresDir = join(tempDir, "features")
     mkdirSync(featuresDir, { recursive: true })
 
@@ -457,8 +457,8 @@ describe("newCommand — subcontext doctype", () => {
     const content = readFileSync(briefPath, "utf-8")
     expect(content).toContain("status: active")
     expect(content).toContain("# add auth\n")
-    // Auto-switched
-    expect(storedSubcontexts[tempDir]).toBe("001.add-auth")
+    // Does NOT auto-switch
+    expect(storedSubcontexts[tempDir]).toBeUndefined()
     // Output includes brief path
     expect(cli.writeln).toHaveBeenCalledWith(
       expect.stringContaining("001.add-auth.md"),
@@ -503,6 +503,67 @@ describe("newCommand — subcontext doctype", () => {
     expect(existsSync(join(featuresDir, "002.second"))).toBe(true)
     expect(existsSync(join(featuresDir, "002.second", "002.second.md"))).toBe(
       true,
+    )
+  })
+
+  it("switches to new subcontext when --switch is passed", () => {
+    const featuresDir = join(tempDir, "features")
+    mkdirSync(featuresDir, { recursive: true })
+
+    mockProject({
+      projectDir: tempDir,
+      rawConfig: {
+        extend: false,
+        sync: [],
+        doctypes: {
+          features: {
+            dir: "features",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
+        },
+        subcontextDoctype: "features",
+        managedDoctypes: [],
+      },
+      subcontextDoctype: "features",
+      managedDoctypes: [],
+      doctypes: {
+        features: {
+          dir: featuresDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Subcontext,
+        },
+      },
+    })
+
+    newCommand.callback!({
+      _: { doctype: "features", title: ["my", "feature"] },
+      flags: { switch: true },
+    })
+
+    expect(storedSubcontexts[tempDir]).toBe("001.my-feature")
+  })
+
+  it("warns when --switch is used with non-subcontext doctype", () => {
+    mockProject({
+      doctypes: {
+        notes: {
+          dir: tempDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Regular,
+        },
+      },
+    })
+
+    newCommand.callback!({
+      _: { doctype: "notes", title: ["Test"] },
+      flags: { switch: true },
+    })
+
+    expect(cli.warning).toHaveBeenCalledWith(
+      "Cannot switch: not a subcontext doctype.",
     )
   })
 
