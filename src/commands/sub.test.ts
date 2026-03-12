@@ -7,19 +7,14 @@ import {
   it,
   vi,
 } from "vitest"
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import * as p from "@clack/prompts"
 import * as cli from "../lib/cli.js"
-import { subAdd, subSwitch, subList, subCurrent, subSeqfix } from "./sub.js"
+import { subSwitch, subCurrent } from "./sub.js"
 import { mockProject } from "../lib/project.test-helpers.js"
+import { DoctypeRole } from "../lib/project.js"
 
 vi.mock("@clack/prompts")
 vi.mock("../lib/cli.js")
@@ -52,10 +47,12 @@ beforeEach(() => {
     projectFile,
     JSON.stringify({
       doctypes: {
+        features: { dir: "features" },
         notes: { dir: "notes" },
         devlogs: { dir: "context/devlogs" },
       },
-      subcontexts: { dir: "features", doctypes: ["notes"] },
+      subcontextDoctype: "features",
+      managedDoctypes: ["notes"],
     }),
   )
 
@@ -80,6 +77,11 @@ function mockSubProject() {
       extend: false,
       sync: [],
       doctypes: {
+        features: {
+          dir: "features",
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+        },
         notes: { dir: "notes", sequenceScheme: "000", sequenceSeparator: "." },
         devlogs: {
           dir: "context/devlogs",
@@ -87,84 +89,33 @@ function mockSubProject() {
           sequenceSeparator: ".",
         },
       },
-      subcontexts: { dir: "features", doctypes: ["notes"] },
+      subcontextDoctype: "features",
+      managedDoctypes: ["notes"],
     },
-    subcontexts: { dir: "features", doctypes: ["notes"] },
+    subcontextDoctype: "features",
+    managedDoctypes: ["notes"],
     doctypes: {
+      features: {
+        dir: featuresDir,
+        sequenceScheme: "000",
+        sequenceSeparator: ".",
+        role: DoctypeRole.Subcontext,
+      },
       notes: {
         dir: join(projectDir, "notes"),
         sequenceScheme: "000",
         sequenceSeparator: ".",
-        inSubcontext: true,
+        role: DoctypeRole.Managed,
       },
       devlogs: {
         dir: join(projectDir, "context", "devlogs"),
         sequenceScheme: "000",
         sequenceSeparator: ".",
-        inSubcontext: false,
+        role: DoctypeRole.Regular,
       },
     },
   })
 }
-
-describe("sub add", () => {
-  it("creates subcontext directory and doctype subdirs", () => {
-    mockSubProject()
-
-    subAdd(["my", "feature"])
-
-    expect(existsSync(join(featuresDir, "001.my-feature"))).toBe(true)
-    expect(existsSync(join(featuresDir, "001.my-feature", "notes"))).toBe(true)
-  })
-
-  it("auto-selects the new subcontext", () => {
-    mockSubProject()
-
-    subAdd(["test"])
-
-    expect(storedSubcontexts[projectDir]).toBe("001.test")
-  })
-
-  it("prints the created directory path", () => {
-    mockSubProject()
-
-    subAdd(["test"])
-
-    expect(cli.writeln).toHaveBeenCalledWith(
-      expect.stringContaining("001.test"),
-    )
-  })
-
-  it("increments number from existing subcontexts", () => {
-    mkdirSync(join(featuresDir, "001.first"))
-    mockSubProject()
-
-    subAdd(["second"])
-
-    expect(existsSync(join(featuresDir, "002.second"))).toBe(true)
-  })
-
-  it("aborts with no args", () => {
-    mockSubProject()
-
-    expect(() => subAdd([])).toThrow("abortError")
-    expect(cli.abortError).toHaveBeenCalledWith(
-      expect.stringContaining("Usage"),
-    )
-  })
-
-  it("aborts when no subcontexts configured", () => {
-    mockProject({
-      projectFile: join(projectDir, ".mcm.json"),
-      projectDir: projectDir,
-    })
-
-    expect(() => subAdd(["test"])).toThrow("abortError")
-    expect(cli.abortError).toHaveBeenCalledWith(
-      "No subcontexts configured in .mcm.json",
-    )
-  })
-})
 
 describe("sub switch", () => {
   it("switches by number", () => {
@@ -248,29 +199,6 @@ describe("sub switch", () => {
   })
 })
 
-describe("sub list", () => {
-  it("lists subcontexts with current marker", () => {
-    mkdirSync(join(featuresDir, "001.alpha"))
-    mkdirSync(join(featuresDir, "002.beta"))
-    storedSubcontexts[projectDir] = "001.alpha"
-    mockSubProject()
-
-    subList()
-
-    const calls = vi.mocked(cli.writeln).mock.calls.map((c) => c[0])
-    expect(calls).toContain("001.alpha *")
-    expect(calls).toContain("002.beta")
-  })
-
-  it("shows warning when no subcontexts exist", () => {
-    mockSubProject()
-
-    subList()
-
-    expect(cli.warning).toHaveBeenCalledWith("No subcontexts found.")
-  })
-})
-
 describe("sub current", () => {
   it("prints current subcontext path", () => {
     mkdirSync(join(featuresDir, "001.alpha"))
@@ -292,92 +220,16 @@ describe("sub current", () => {
       expect.stringContaining("No subcontext selected"),
     )
   })
-})
 
-describe("sub seqfix", () => {
-  it("prints renames and advises -f in dry-run mode", () => {
-    mkdirSync(join(featuresDir, "001.alpha"))
-    mkdirSync(join(featuresDir, "07.beta"))
-    mkdirSync(join(featuresDir, "007.gamma"))
-    mockSubProject()
-
-    subSeqfix(false)
-
-    expect(cli.info).toHaveBeenCalledWith(expect.stringContaining("07.beta"))
-    expect(cli.info).toHaveBeenCalledWith(expect.stringContaining("-f"))
-    expect(cli.success).not.toHaveBeenCalled()
-  })
-
-  it("prints 'Nothing to rename' when all dirs are correct", () => {
-    mkdirSync(join(featuresDir, "001.alpha"))
-    mkdirSync(join(featuresDir, "002.beta"))
-    mockSubProject()
-
-    subSeqfix(false)
-
-    expect(cli.info).toHaveBeenCalledWith("Nothing to rename.")
-  })
-
-  it("renames dirs and reports success when forced", () => {
-    mkdirSync(join(featuresDir, "001.alpha"))
-    mkdirSync(join(featuresDir, "07.beta"))
-    mkdirSync(join(featuresDir, "007.gamma"))
-    mockSubProject()
-
-    subSeqfix(true)
-
-    expect(cli.success).toHaveBeenCalledWith(
-      expect.stringContaining("Renamed 2 dir(s)"),
-    )
-    expect(existsSync(join(featuresDir, "001.alpha"))).toBe(true)
-    expect(existsSync(join(featuresDir, "002.beta"))).toBe(true)
-    expect(existsSync(join(featuresDir, "003.gamma"))).toBe(true)
-    expect(existsSync(join(featuresDir, "07.beta"))).toBe(false)
-    expect(existsSync(join(featuresDir, "007.gamma"))).toBe(false)
-  })
-
-  it("updates global config when the current subcontext is renamed", () => {
-    mkdirSync(join(featuresDir, "001.alpha"))
-    mkdirSync(join(featuresDir, "007.beta"))
-    storedSubcontexts[projectDir] = "007.beta"
-    mockSubProject()
-
-    subSeqfix(true)
-
-    expect(storedSubcontexts[projectDir]).toBe("002.beta")
-  })
-
-  it("does not update global config when current subcontext is unchanged", () => {
-    mkdirSync(join(featuresDir, "001.alpha"))
-    mkdirSync(join(featuresDir, "007.beta"))
-    storedSubcontexts[projectDir] = "001.alpha"
-    mockSubProject()
-
-    subSeqfix(true)
-
-    expect(storedSubcontexts[projectDir]).toBe("001.alpha")
-  })
-
-  it("leaves non-sequenced dirs untouched", () => {
-    mkdirSync(join(featuresDir, "001.alpha"))
-    mkdirSync(join(featuresDir, "scratch"))
-    mockSubProject()
-
-    subSeqfix(true)
-
-    expect(existsSync(join(featuresDir, "scratch"))).toBe(true)
-    expect(cli.info).toHaveBeenCalledWith("Nothing to rename.")
-  })
-
-  it("aborts when no subcontexts configured", () => {
+  it("aborts when no subcontext doctype configured", () => {
     mockProject({
       projectFile: join(projectDir, ".mcm.json"),
       projectDir: projectDir,
     })
 
-    expect(() => subSeqfix(false)).toThrow("abortError")
+    expect(() => subCurrent()).toThrow("abortError")
     expect(cli.abortError).toHaveBeenCalledWith(
-      "No subcontexts configured in .mcm.json",
+      "No subcontext doctype configured in .mcm.json",
     )
   })
 })

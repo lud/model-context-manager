@@ -10,7 +10,7 @@ import {
 } from "./list.js"
 import type { ListFilters } from "./list.js"
 import { mockProject } from "../lib/project.test-helpers.js"
-import type { ResolvedProject } from "../lib/project.js"
+import { DoctypeRole, type ResolvedProject } from "../lib/project.js"
 
 vi.mock("../lib/cli.js")
 vi.mock("../lib/project.js")
@@ -114,7 +114,9 @@ describe("matchesFilters", () => {
   describe("--tag (AND logic)", () => {
     it("matches when all tags are present in array", () => {
       const filters = makeFilters({ tags: ["api", "auth"] })
-      expect(matchesFilters({ tags: ["api", "auth", "extra"] }, filters)).toBe(true)
+      expect(matchesFilters({ tags: ["api", "auth", "extra"] }, filters)).toBe(
+        true,
+      )
     })
 
     it("fails when one tag is missing", () => {
@@ -149,11 +151,17 @@ describe("matchesFilters", () => {
   it("combined open + tag filters use intersection", () => {
     const filters = makeFilters({ open: true, tags: ["api"] })
     // closed with tag → excluded by open filter
-    expect(matchesFilters({ status: "closed", tags: ["api"] }, filters)).toBe(false)
+    expect(matchesFilters({ status: "closed", tags: ["api"] }, filters)).toBe(
+      false,
+    )
     // open without tag → excluded by tag filter
-    expect(matchesFilters({ status: "open", tags: ["other"] }, filters)).toBe(false)
+    expect(matchesFilters({ status: "open", tags: ["other"] }, filters)).toBe(
+      false,
+    )
     // open with tag → included
-    expect(matchesFilters({ status: "open", tags: ["api"] }, filters)).toBe(true)
+    expect(matchesFilters({ status: "open", tags: ["api"] }, filters)).toBe(
+      true,
+    )
   })
 })
 
@@ -174,7 +182,7 @@ describe("listAllDoctypes", () => {
         dir: "/absolute/docs",
         sequenceScheme: "000",
         sequenceSeparator: ".",
-        inSubcontext: false,
+        role: DoctypeRole.Regular,
       },
     }
     listAllDoctypes(doctypes)
@@ -194,7 +202,7 @@ function makeNotesWithFmProject(): ResolvedProject {
         dir: notesWithFmDir,
         sequenceScheme: "000",
         sequenceSeparator: ".",
-        inSubcontext: false,
+        role: DoctypeRole.Regular,
       },
     },
   } as unknown as ResolvedProject
@@ -216,7 +224,11 @@ describe("listDoctypeFiles — notes-with-fm fixture", () => {
   })
 
   it("--open: includes 001, 003, 004 (no frontmatter = open)", () => {
-    listDoctypeFiles(makeNotesWithFmProject(), "notes", makeFilters({ open: true }))
+    listDoctypeFiles(
+      makeNotesWithFmProject(),
+      "notes",
+      makeFilters({ open: true }),
+    )
     expect(capturedFileNames()).toEqual([
       "001.open-tagged.md",
       "003.open-no-tags.md",
@@ -225,13 +237,24 @@ describe("listDoctypeFiles — notes-with-fm fixture", () => {
   })
 
   it("--closed: includes only 002", () => {
-    listDoctypeFiles(makeNotesWithFmProject(), "notes", makeFilters({ closed: true }))
+    listDoctypeFiles(
+      makeNotesWithFmProject(),
+      "notes",
+      makeFilters({ closed: true }),
+    )
     expect(capturedFileNames()).toEqual(["002.closed-tagged.md"])
   })
 
   it("--tag api (AND): includes 001 and 002", () => {
-    listDoctypeFiles(makeNotesWithFmProject(), "notes", makeFilters({ tags: ["api"] }))
-    expect(capturedFileNames()).toEqual(["001.open-tagged.md", "002.closed-tagged.md"])
+    listDoctypeFiles(
+      makeNotesWithFmProject(),
+      "notes",
+      makeFilters({ tags: ["api"] }),
+    )
+    expect(capturedFileNames()).toEqual([
+      "001.open-tagged.md",
+      "002.closed-tagged.md",
+    ])
   })
 
   it("--tag api --tag auth (AND): includes only 001", () => {
@@ -249,7 +272,10 @@ describe("listDoctypeFiles — notes-with-fm fixture", () => {
       "notes",
       makeFilters({ tags: ["api"], anyTag: true }),
     )
-    expect(capturedFileNames()).toEqual(["001.open-tagged.md", "002.closed-tagged.md"])
+    expect(capturedFileNames()).toEqual([
+      "001.open-tagged.md",
+      "002.closed-tagged.md",
+    ])
   })
 
   it("--prop priority:high: includes only 003", () => {
@@ -280,7 +306,11 @@ describe("listDoctypeFiles — notes-with-fm fixture", () => {
   })
 
   it("--first: returns only the first file (001)", () => {
-    listDoctypeFiles(makeNotesWithFmProject(), "notes", makeFilters({ first: true }))
+    listDoctypeFiles(
+      makeNotesWithFmProject(),
+      "notes",
+      makeFilters({ first: true }),
+    )
     expect(capturedFileNames()).toEqual(["001.open-tagged.md"])
   })
 
@@ -303,7 +333,7 @@ describe("listDoctypeFiles — existing fixture", () => {
           dir: join(listFilesFixture, "notes"),
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     } as unknown as ResolvedProject
@@ -325,6 +355,73 @@ describe("listDoctypeFiles — existing fixture", () => {
 })
 
 // ---------------------------------------------------------------------------
+// listDoctypeFiles — subcontext doctype (briefs)
+// ---------------------------------------------------------------------------
+
+const multiSubcontextFixture = join(
+  import.meta.dirname,
+  "../../test/fixtures/doctypes/multi-subcontext",
+)
+
+describe("listDoctypeFiles — subcontext doctype", () => {
+  function mockSubcontextProject() {
+    mockProject({
+      currentSubcontext: false,
+      projectDir: multiSubcontextFixture,
+      projectFile: join(multiSubcontextFixture, ".mcm.json"),
+      subcontextDoctype: "features",
+      managedDoctypes: ["notes"],
+      doctypes: {
+        features: {
+          dir: join(multiSubcontextFixture, "features"),
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Subcontext,
+        },
+      },
+      rawConfig: {
+        extend: false,
+        doctypes: {
+          features: {
+            dir: "features",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
+        },
+        sync: [],
+        subcontextDoctype: "features",
+        managedDoctypes: ["notes"],
+      },
+    })
+  }
+
+  it("lists brief files from subcontext directories", () => {
+    mockSubcontextProject()
+
+    listCommand.callback!({ _: { doctype: "features" } })
+
+    const calls = vi.mocked(cli.writeln).mock.calls.map((c) => c[0])
+    const names = calls.map((p) => String(p).split("/").pop())
+    expect(names).toContain("001.feature-a.md")
+    expect(names).toContain("002.feature-b.md")
+  })
+
+  it("filters briefs by frontmatter status", () => {
+    mockSubcontextProject()
+
+    listCommand.callback!({
+      _: { doctype: "features" },
+      flags: { open: true },
+    })
+
+    const calls = vi.mocked(cli.writeln).mock.calls.map((c) => c[0])
+    const names = calls.map((p) => String(p).split("/").pop())
+    expect(names).toContain("001.feature-a.md")
+    expect(names).toContain("002.feature-b.md")
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Command-level error tests
 // ---------------------------------------------------------------------------
 
@@ -336,7 +433,7 @@ describe("listCommand error cases", () => {
           dir: notesWithFmDir,
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })
@@ -371,7 +468,7 @@ describe("listCommand error cases", () => {
           dir: notesWithFmDir,
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })
@@ -421,7 +518,7 @@ describe("listCommand integration", () => {
           dir: notesDir,
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })

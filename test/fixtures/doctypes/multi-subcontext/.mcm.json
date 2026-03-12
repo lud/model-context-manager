@@ -1,9 +1,8 @@
 {
   "doctypes": {
+    "features": { "dir": "features" },
     "notes": { "dir": "notes" }
   },
-  "subcontexts": {
-    "dir": "features",
-    "doctypes": ["notes"]
-  }
+  "subcontextDoctype": "features",
+  "managedDoctypes": ["notes"]
 }

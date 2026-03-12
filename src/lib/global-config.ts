@@ -1,5 +1,9 @@
-import { existsSync, mkdirSync } from "node:fs"
-import { readFileSyncOrAbort, writeFileSyncOrAbort } from "./fs.js"
+import { existsSync } from "node:fs"
+import {
+  mkdirSyncOrAbort,
+  readFileSyncOrAbort,
+  writeFileSyncOrAbort,
+} from "./fs.js"
 import { dirname, join } from "node:path"
 import envPaths from "env-paths"
 import { z } from "zod"
@@ -41,7 +45,7 @@ export function getGlobalConfig(): GlobalConfig {
 }
 
 export function saveGlobalConfig(config: GlobalConfig): void {
-  mkdirSync(dirname(CONFIG_FILE), { recursive: true })
+  mkdirSyncOrAbort(dirname(CONFIG_FILE), { recursive: true })
   writeFileSyncOrAbort(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n")
 }
 

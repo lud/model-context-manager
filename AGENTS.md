@@ -46,9 +46,47 @@ Use these wrappers instead of calling `node:fs` directly in commands. They call 
 
 | Function                           | Wraps           |
 | ---------------------------------- | --------------- |
+| `mkdirSyncOrAbort(path, opts)`     | `mkdirSync`     |
 | `readdirSyncOrAbort(path)`         | `readdirSync`   |
 | `readFileSyncOrAbort(path)`        | `readFileSync`  |
 | `writeFileSyncOrAbort(path, data)` | `writeFileSync` |
+
+Other filesystem operations should follow the same pattern. New additions should be referenced here.
+
+## Doctype roles and dispatch pattern
+
+Each doctype has a `role: "regular" | "subcontext" | "managed"` (type `DoctypeRole` from `project.ts`). Commands that branch on role should use a **switch statement dispatching to small specialized functions**, keeping shared logic in the command handler.
+
+Pattern: define a plan/target type, then a dispatch function with a switch:
+
+```typescript
+// 1. Define a result type for role-specific logic
+type SeqfixPlan = { displayLines: string[]; apply: () => void; successMessage: string }
+
+// 2. Small specialized functions per role
+function planSubcontextSeqfix(...): SeqfixPlan | null { ... }
+function planManagedSeqfix(...): SeqfixPlan | null { ... }
+function planRegularSeqfix(...): SeqfixPlan | null { ... }
+
+// 3. Switch dispatch
+function planSeqfix(project, entry, doctype): SeqfixPlan | null {
+  switch (entry.role) {
+    case "subcontext": return planSubcontextSeqfix(project, entry)
+    case "managed":    return planManagedSeqfix(project, entry, doctype)
+    case "regular":    return planRegularSeqfix(entry)
+  }
+}
+
+// 4. Command handler uses the plan — shared logic stays here
+const plan = planSeqfix(project, entry, doctype)
+if (!plan) { cli.info("Nothing to rename."); return }
+for (const line of plan.displayLines) cli.info(line)
+if (!force) { cli.info("Run with -f to apply changes."); return }
+plan.apply()
+cli.success(plan.successMessage)
+```
+
+See `new.ts` (`NewFileTarget` + `resolveNewFileTarget`) and `seqfix.ts` (`SeqfixPlan` + `planSeqfix`) for real examples.
 
 ## Project system (`src/lib/project.ts`)
 
@@ -85,4 +123,21 @@ vi.mocked(cli.abort).mockImplementation(() => { throw new Error("abort") })
 ```
 
 **Fixtures** in `test/fixtures/` are real files on disk. Prefer them over mocking `fs` or creating tmp directories.
+
+**Mutable fixtures:** When tests need to rename, delete, or write files, use `createTestWorkspace(label)` from `src/lib/test-workspace.ts`:
+
+```typescript
+import { createTestWorkspace } from "../lib/test-workspace.js"
+
+const workspace = createTestWorkspace("seqfix")
+
+it("renames files", () => {
+  const dir = workspace.copyFixture(fixtureDir)  // mutable copy
+  // ... mutate files in dir ...
+})
+```
+
+- `workspace.copyFixture(srcDir, name?)` — copies a fixture directory, returns mutable path
+- `workspace.dir(name?)` — creates an empty directory
+- Cleanup is automatic via `afterAll`
 

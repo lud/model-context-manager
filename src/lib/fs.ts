@@ -1,16 +1,32 @@
 import {
+  mkdirSync as _mkdirSync,
   readdirSync as _readdirSync,
   readFileSync as _readFileSync,
   writeFileSync as _writeFileSync,
 } from "node:fs"
 import type {
   Dirent,
+  MakeDirectoryOptions,
   ObjectEncodingOptions,
   PathLike,
   PathOrFileDescriptor,
   WriteFileOptions,
 } from "node:fs"
 import { abortError } from "./cli.js"
+
+function mkdirErrorMessage(path: string, err: unknown): string {
+  const code = (err as NodeJS.ErrnoException).code
+  switch (code) {
+    case "EACCES":
+      return `permission denied: ${path}`
+    case "ENOTDIR":
+      return `not a directory: ${path}`
+    case "EEXIST":
+      return `already exists: ${path}`
+    default:
+      return `failed to create directory: ${path}`
+  }
+}
 
 function readdirErrorMessage(path: string, err: unknown): string {
   const code = (err as NodeJS.ErrnoException).code
@@ -51,6 +67,17 @@ function writeFileErrorMessage(path: string, err: unknown): string {
       return `path is a directory: ${path}`
     default:
       return `failed to write file: ${path}`
+  }
+}
+
+export function mkdirSyncOrAbort(
+  path: PathLike,
+  options?: MakeDirectoryOptions,
+): void {
+  try {
+    _mkdirSync(path, options)
+  } catch (err) {
+    abortError(mkdirErrorMessage(String(path), err))
   }
 }
 

@@ -101,7 +101,9 @@ describe("applyTemplates", () => {
   })
 
   it("walks arrays", () => {
-    const result = applyTemplates(["{{date}}", "static"], { date: "2026-03-10" })
+    const result = applyTemplates(["{{date}}", "static"], {
+      date: "2026-03-10",
+    })
     expect(result).toEqual(["2026-03-10", "static"])
   })
 

@@ -30,7 +30,10 @@ afterEach(() => {
 describe("closeCommand", () => {
   it("sets status: closed and preserves other fields", () => {
     const filePath = join(tempDir, "test.md")
-    writeFileSync(filePath, "---\ntitle: My Note\nstatus: open\n---\n# My Note\n")
+    writeFileSync(
+      filePath,
+      "---\ntitle: My Note\nstatus: open\n---\n# My Note\n",
+    )
 
     closeCommand.callback!({ _: { file: filePath } })
 
@@ -75,8 +78,8 @@ describe("closeCommand", () => {
   it("aborts when file does not exist", () => {
     const filePath = join(tempDir, "nonexistent.md")
 
-    expect(() =>
-      closeCommand.callback!({ _: { file: filePath } }),
-    ).toThrow("abortError")
+    expect(() => closeCommand.callback!({ _: { file: filePath } })).toThrow(
+      "abortError",
+    )
   })
 })

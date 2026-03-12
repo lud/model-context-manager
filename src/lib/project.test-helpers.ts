@@ -1,9 +1,11 @@
 import { readdirSync } from "node:fs"
-import { isAbsolute, join } from "node:path"
+import { join } from "node:path"
 import { vi } from "vitest"
 import * as projectModule from "./project.js"
+import { DoctypeRole } from "./project.js"
 import type { DoctypeFileEntry, ResolvedProject } from "./project.js"
-import { listSubcontexts } from "./subcontext.js"
+import { abortError } from "./cli.js"
+import { listBriefFiles, listSubcontexts } from "./subcontext.js"
 
 // Real implementation of listDoctypeFilesAcrossSubcontexts for use in tests.
 // The module is auto-mocked by vi.mock("./project.js"), so we provide the
@@ -13,7 +15,12 @@ function realListDoctypeFiles(
   doctypeKey: string,
 ): DoctypeFileEntry[] {
   const entry = project.doctypes[doctypeKey]
-  if (!entry.inSubcontext) {
+
+  if (entry.role === DoctypeRole.Subcontext) {
+    return listBriefFiles(entry.dir)
+  }
+
+  if (entry.role !== DoctypeRole.Managed) {
     let files: string[] = []
     try {
       files = readdirSync(entry.dir)
@@ -22,10 +29,12 @@ function realListDoctypeFiles(
     }
     return [{ dir: entry.dir, files }]
   }
-  const rawSubcontextsDir = project.rawConfig.subcontexts!.dir
-  const subcontextsAbsDir = isAbsolute(rawSubcontextsDir)
-    ? rawSubcontextsDir
-    : join(project.projectDir, rawSubcontextsDir)
+
+  // managed doctype: scan across all subcontexts
+  const subDoctypeKey = project.rawConfig.subcontextDoctype!
+  const subEntry = project.doctypes[subDoctypeKey]
+  const subcontextsAbsDir = subEntry.dir
+
   const subDirs = listSubcontexts(subcontextsAbsDir)
   const rawDoctypeDir = project.rawConfig.doctypes[doctypeKey].dir
   return subDirs.map((subDir) => {
@@ -45,9 +54,16 @@ export function mockProject(overrides: Partial<ResolvedProject> = {}): void {
     extend: false,
     doctypes: {},
     sync: [],
+    subcontextDoctype: undefined,
+    managedDoctypes: [],
     projectFile: "/mock/.mcm.json",
     projectDir: "/mock",
-    rawConfig: { extend: false, doctypes: {}, sync: [] },
+    rawConfig: {
+      extend: false,
+      doctypes: {},
+      sync: [],
+      managedDoctypes: [],
+    },
     currentSubcontext: false,
     ...overrides,
   })
@@ -55,4 +71,15 @@ export function mockProject(overrides: Partial<ResolvedProject> = {}): void {
     projectModule,
     "listDoctypeFilesAcrossSubcontexts",
   ).mockImplementation(realListDoctypeFiles)
+  vi.spyOn(projectModule, "resolveDoctypeArg").mockImplementation(
+    (project: ResolvedProject, doctype: string) => {
+      if (doctype === "sub") {
+        if (!project.rawConfig.subcontextDoctype) {
+          abortError("No subcontext doctype configured")
+        }
+        return project.rawConfig.subcontextDoctype
+      }
+      return doctype
+    },
+  )
 }

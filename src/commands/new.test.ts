@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest"
 import {
   existsSync,
   mkdirSync,
@@ -12,6 +20,7 @@ import { tmpdir } from "node:os"
 import * as cli from "../lib/cli.js"
 import { newCommand, resolveEditor } from "./new.js"
 import { mockProject } from "../lib/project.test-helpers.js"
+import { DoctypeRole } from "../lib/project.js"
 
 vi.mock("../lib/cli.js")
 vi.mock("../lib/project.js")
@@ -19,8 +28,19 @@ vi.mock("node:child_process")
 
 let tempDir: string
 
+// Mock global config storage in memory
+let storedSubcontexts: Record<string, string> = {}
+
+vi.mock("../lib/global-config.js", () => ({
+  getCurrentSubcontext: (dir: string) => storedSubcontexts[dir],
+  setCurrentSubcontext: (dir: string, name: string) => {
+    storedSubcontexts[dir] = name
+  },
+}))
+
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), "mcm-new-test-"))
+  storedSubcontexts = {}
   vi.mocked(cli.abortError).mockImplementation(() => {
     throw new Error("abortError")
   })
@@ -63,7 +83,7 @@ describe("newCommand", () => {
           dir: tempDir,
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })
@@ -89,7 +109,7 @@ describe("newCommand", () => {
           dir: tempDir,
           sequenceScheme: "none",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })
@@ -112,7 +132,7 @@ describe("newCommand", () => {
           dir: tempDir,
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })
@@ -132,7 +152,7 @@ describe("newCommand", () => {
           dir: tempDir,
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
           defaultProperties: { priority: "high" },
         },
       },
@@ -153,7 +173,7 @@ describe("newCommand", () => {
           dir: tempDir,
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
           defaultProperties: {},
         },
       },
@@ -162,7 +182,9 @@ describe("newCommand", () => {
     newCommand.callback!({ _: { doctype: "notes", title: ["Empty", "Props"] } })
 
     expect(cli.warning).toHaveBeenCalledWith(
-      expect.stringContaining('No frontmatter properties configured for doctype "notes"'),
+      expect.stringContaining(
+        'No frontmatter properties configured for doctype "notes"',
+      ),
     )
     const content = readFileSync(join(tempDir, "001.empty-props.md"), "utf-8")
     expect(content).toContain("title: Empty Props")
@@ -175,13 +197,15 @@ describe("newCommand", () => {
           dir: tempDir,
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
           defaultProperties: { created_on: "{{date}}", label: "{{title}}" },
         },
       },
     })
 
-    newCommand.callback!({ _: { doctype: "notes", title: ["Template", "Test"] } })
+    newCommand.callback!({
+      _: { doctype: "notes", title: ["Template", "Test"] },
+    })
 
     const content = readFileSync(join(tempDir, "001.template-test.md"), "utf-8")
     expect(content).toMatch(/created_on: \d{4}-\d{2}-\d{2}/)
@@ -196,7 +220,7 @@ describe("newCommand", () => {
           dir: tempDir,
           sequenceScheme: "none",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })
@@ -231,7 +255,7 @@ describe("newCommand", () => {
           dir: newDir,
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })
@@ -257,16 +281,27 @@ describe("newCommand", () => {
         projectDir: base,
         currentSubcontext: "002.sub-b",
         doctypes: {
+          features: {
+            dir: join(base, "features"),
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+            role: DoctypeRole.Subcontext,
+          },
           notes: {
             dir: sub2Notes,
             sequenceScheme: "000",
             sequenceSeparator: ".",
-            inSubcontext: true,
+            role: DoctypeRole.Managed,
           },
         },
         rawConfig: {
           extend: false,
           doctypes: {
+            features: {
+              dir: "features",
+              sequenceScheme: "000",
+              sequenceSeparator: ".",
+            },
             notes: {
               dir: "notes",
               sequenceScheme: "000",
@@ -274,7 +309,8 @@ describe("newCommand", () => {
             },
           },
           sync: [],
-          subcontexts: { dir: "features", doctypes: ["notes"] },
+          subcontextDoctype: "features",
+          managedDoctypes: ["notes"],
         },
       })
 
@@ -301,7 +337,7 @@ describe("newCommand", () => {
             dir: tempDir,
             sequenceScheme: "000",
             sequenceSeparator: ".",
-            inSubcontext: false,
+            role: DoctypeRole.Regular,
           },
         },
       })
@@ -327,7 +363,7 @@ describe("newCommand", () => {
             dir: tempDir,
             sequenceScheme: "000",
             sequenceSeparator: ".",
-            inSubcontext: false,
+            role: DoctypeRole.Regular,
           },
         },
       })
@@ -348,7 +384,7 @@ describe("newCommand", () => {
           dir: tempDir,
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: true,
+          role: DoctypeRole.Managed,
         },
       },
     })
@@ -360,5 +396,151 @@ describe("newCommand", () => {
     expect(cli.abortError).toHaveBeenCalledWith(
       'Doctype "notes" requires a subcontext. Use "mcm sub switch" to select one.',
     )
+  })
+})
+
+describe("newCommand — subcontext doctype", () => {
+  it("creates subcontext dir + brief + managed subdirs and switches context", () => {
+    const featuresDir = join(tempDir, "features")
+    mkdirSync(featuresDir, { recursive: true })
+
+    mockProject({
+      projectDir: tempDir,
+      rawConfig: {
+        extend: false,
+        sync: [],
+        doctypes: {
+          features: {
+            dir: "features",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
+          tasks: {
+            dir: "tasks",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
+        },
+        subcontextDoctype: "features",
+        managedDoctypes: ["tasks"],
+      },
+      subcontextDoctype: "features",
+      managedDoctypes: ["tasks"],
+      doctypes: {
+        features: {
+          dir: featuresDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Subcontext,
+        },
+        tasks: {
+          dir: join(tempDir, "tasks"),
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Managed,
+        },
+      },
+    })
+
+    newCommand.callback!({
+      _: { doctype: "features", title: ["add", "auth"] },
+    })
+
+    // Directory created
+    expect(existsSync(join(featuresDir, "001.add-auth"))).toBe(true)
+    // Managed subdir created
+    expect(existsSync(join(featuresDir, "001.add-auth", "tasks"))).toBe(true)
+    // Brief file created
+    const briefPath = join(featuresDir, "001.add-auth", "001.add-auth.md")
+    expect(existsSync(briefPath)).toBe(true)
+    // Brief has frontmatter
+    const content = readFileSync(briefPath, "utf-8")
+    expect(content).toContain("status: open")
+    expect(content).toContain("# add auth\n")
+    // Auto-switched
+    expect(storedSubcontexts[tempDir]).toBe("001.add-auth")
+    // Output includes brief path
+    expect(cli.writeln).toHaveBeenCalledWith(
+      expect.stringContaining("001.add-auth.md"),
+    )
+  })
+
+  it("increments number from existing subcontexts", () => {
+    const featuresDir = join(tempDir, "features")
+    mkdirSync(join(featuresDir, "001.first"), { recursive: true })
+
+    mockProject({
+      projectDir: tempDir,
+      rawConfig: {
+        extend: false,
+        sync: [],
+        doctypes: {
+          features: {
+            dir: "features",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
+        },
+        subcontextDoctype: "features",
+        managedDoctypes: [],
+      },
+      subcontextDoctype: "features",
+      managedDoctypes: [],
+      doctypes: {
+        features: {
+          dir: featuresDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Subcontext,
+        },
+      },
+    })
+
+    newCommand.callback!({
+      _: { doctype: "features", title: ["second"] },
+    })
+
+    expect(existsSync(join(featuresDir, "002.second"))).toBe(true)
+    expect(existsSync(join(featuresDir, "002.second", "002.second.md"))).toBe(
+      true,
+    )
+  })
+
+  it("resolves 'sub' alias to subcontext doctype", () => {
+    const featuresDir = join(tempDir, "features")
+    mkdirSync(featuresDir, { recursive: true })
+
+    mockProject({
+      projectDir: tempDir,
+      rawConfig: {
+        extend: false,
+        sync: [],
+        doctypes: {
+          features: {
+            dir: "features",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
+        },
+        subcontextDoctype: "features",
+        managedDoctypes: [],
+      },
+      subcontextDoctype: "features",
+      managedDoctypes: [],
+      doctypes: {
+        features: {
+          dir: featuresDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Subcontext,
+        },
+      },
+    })
+
+    newCommand.callback!({
+      _: { doctype: "sub", title: ["test"] },
+    })
+
+    expect(existsSync(join(featuresDir, "001.test"))).toBe(true)
   })
 })

@@ -3,11 +3,18 @@ import { dirname, isAbsolute, join, resolve } from "node:path"
 import { z } from "zod"
 import { abortError } from "./cli.js"
 import { getCurrentSubcontext } from "./global-config.js"
-import { listSubcontexts, resolveSubcontextArg } from "./subcontext.js"
+import {
+  listBriefFiles,
+  listSubcontexts,
+  resolveSubcontextArg,
+} from "./subcontext.js"
 
 export const DoctypeKeySchema = z
   .string()
-  .regex(/^[A-Za-z0-9._-]+$/)
+  .regex(
+    /^[A-Za-z0-9._-]+$/,
+    "Only letters, digits, dots, hyphens, and underscores are allowed",
+  )
   .describe(
     "Doctype name. Only letters, digits, dots, hyphens, and underscores are allowed.",
   )
@@ -77,20 +84,6 @@ const SyncSpecSchema = z
   })
   .describe("A single sync specification.")
 
-const SubcontextsSchema = z
-  .object({
-    dir: z
-      .string()
-      .describe(
-        "Directory where subcontext directories are created. Relative paths are resolved from the config file location.",
-      ),
-    doctypes: z
-      .array(DoctypeKeySchema)
-      .min(1)
-      .describe("Doctypes managed by subcontexts."),
-  })
-  .describe("Subcontexts configuration.")
-
 export const ProjectSchema = z
   .object({
     extend: z
@@ -107,13 +100,77 @@ export const ProjectSchema = z
       .array(SyncSpecSchema)
       .default([])
       .describe("File synchronization specifications."),
-    subcontexts: SubcontextsSchema.optional(),
+    subcontextDoctype: z
+      .string()
+      .optional()
+      .describe("Name of the doctype that serves as the subcontext container."),
+    managedDoctypes: z
+      .array(DoctypeKeySchema)
+      .default([])
+      .describe("Doctypes whose files live inside subcontext directories."),
+  })
+  .superRefine((data, ctx) => {
+    for (const key of Object.keys(data.doctypes)) {
+      if (key === "sub") {
+        ctx.addIssue({
+          code: "custom",
+          message: '"sub" is reserved and cannot be used as a doctype name',
+          path: ["doctypes", key],
+        })
+      }
+    }
+
+    if (data.subcontextDoctype !== undefined) {
+      if (!(data.subcontextDoctype in data.doctypes)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `subcontextDoctype references unknown doctype: "${data.subcontextDoctype}"`,
+          path: ["subcontextDoctype"],
+        })
+      }
+      if (data.managedDoctypes.includes(data.subcontextDoctype)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `subcontextDoctype "${data.subcontextDoctype}" must not appear in managedDoctypes`,
+          path: ["managedDoctypes"],
+        })
+      }
+    }
+
+    for (const key of data.managedDoctypes) {
+      if (!(key in data.doctypes)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `managedDoctypes references unknown doctype: "${key}"`,
+          path: ["managedDoctypes"],
+        })
+      }
+    }
+
+    const dirToDoctype = new Map<string, string>()
+    for (const [key, value] of Object.entries(data.doctypes)) {
+      const existing = dirToDoctype.get(value.dir)
+      if (existing) {
+        ctx.addIssue({
+          code: "custom",
+          message: `duplicate directory "${value.dir}": used by both "${existing}" and "${key}"`,
+          path: ["doctypes", key, "dir"],
+        })
+      } else {
+        dirToDoctype.set(value.dir, key)
+      }
+    }
   })
   .describe("MCM configuration file.")
 
 export type Project = z.infer<typeof ProjectSchema>
 export type DoctypeEntry = z.infer<typeof DoctypeValueSchema>
-export type ResolvedDoctypeEntry = DoctypeEntry & { inSubcontext: boolean }
+export enum DoctypeRole {
+  Regular = "regular",
+  Subcontext = "subcontext",
+  Managed = "managed",
+}
+export type ResolvedDoctypeEntry = DoctypeEntry & { role: DoctypeRole }
 
 export type LocalFsUpstream = { kind: "localfs"; path: string }
 export type GitHubUpstream = { kind: "github"; repo: string; path: string }
@@ -147,6 +204,19 @@ export function loadJSONFile(filePath: string): unknown {
   return JSON.parse(content)
 }
 
+export function resolveDoctypeArg(
+  project: ResolvedProject,
+  doctype: string,
+): string {
+  if (doctype === "sub") {
+    if (!project.rawConfig.subcontextDoctype) {
+      abortError("No subcontext doctype configured")
+    }
+    return project.rawConfig.subcontextDoctype
+  }
+  return doctype
+}
+
 export function loadRawProject(
   raw: unknown,
   projectFile: string,
@@ -156,33 +226,38 @@ export function loadRawProject(
   const resolvedProjectFile = resolve(projectFile)
   const projectDir = dirname(resolvedProjectFile)
 
-  const managedDoctypes = new Set(project.subcontexts?.doctypes ?? [])
-  if (project.subcontexts) {
-    for (const key of managedDoctypes) {
-      if (!(key in project.doctypes)) {
-        throw new Error(`Subcontexts references unknown doctype: "${key}"`)
-      }
-    }
-  }
+  const managedSet = new Set(project.managedDoctypes)
+  const subcontextDoctypeKey = project.subcontextDoctype
 
-  const subcontextsAbsDir = project.subcontexts
-    ? isAbsolute(project.subcontexts.dir)
-      ? project.subcontexts.dir
-      : join(projectDir, project.subcontexts.dir)
-    : undefined
+  // Derive subcontextsAbsDir from the subcontext doctype's dir
+  let subcontextsAbsDir: string | undefined
+  if (subcontextDoctypeKey && subcontextDoctypeKey in project.doctypes) {
+    const subDoctypeDir = project.doctypes[subcontextDoctypeKey].dir
+    subcontextsAbsDir = isAbsolute(subDoctypeDir)
+      ? subDoctypeDir
+      : join(projectDir, subDoctypeDir)
+  }
 
   const subcontextName = opts?.subcontext
 
   const resolvedDoctypes: Record<string, ResolvedDoctypeEntry> = {}
   for (const [key, value] of Object.entries(project.doctypes)) {
-    const inSubcontext = managedDoctypes.has(key)
+    let role: DoctypeRole
+    if (key === subcontextDoctypeKey) {
+      role = DoctypeRole.Subcontext
+    } else if (managedSet.has(key)) {
+      role = DoctypeRole.Managed
+    } else {
+      role = DoctypeRole.Regular
+    }
+
     let dir: string
-    if (inSubcontext && subcontextName && subcontextsAbsDir) {
+    if (role === DoctypeRole.Managed && subcontextName && subcontextsAbsDir) {
       dir = join(subcontextsAbsDir, subcontextName, value.dir)
     } else {
       dir = isAbsolute(value.dir) ? value.dir : join(projectDir, value.dir)
     }
-    resolvedDoctypes[key] = { ...value, dir, inSubcontext }
+    resolvedDoctypes[key] = { ...value, dir, role }
   }
 
   const resolvedSync: ResolvedSyncSpec[] = project.sync.map((spec) => {
@@ -222,9 +297,11 @@ export function loadRawProject(
 }
 
 function resolveSubcontextName(base: ResolvedProject, sub: string): string {
-  const subcontextsAbsDir = isAbsolute(base.subcontexts!.dir)
-    ? base.subcontexts!.dir
-    : join(base.projectDir, base.subcontexts!.dir)
+  const subDoctypeKey = base.rawConfig.subcontextDoctype
+  if (!subDoctypeKey) abortError("No subcontext doctype configured")
+  const subEntry = base.doctypes[subDoctypeKey]
+  if (!subEntry) abortError(`Subcontext doctype "${subDoctypeKey}" not found`)
+  const subcontextsAbsDir = subEntry.dir
 
   const result = resolveSubcontextArg(subcontextsAbsDir, sub)
   if (typeof result === "string") return result
@@ -256,7 +333,7 @@ export function getProject(opts?: { sub?: string }): ResolvedProject {
     )
   }
 
-  if (!base.subcontexts) return base
+  if (!base.rawConfig.subcontextDoctype) return base
 
   const subcontextName = opts?.sub
     ? resolveSubcontextName(base, opts.sub)
@@ -281,7 +358,11 @@ export function listDoctypeFilesAcrossSubcontexts(
 ): DoctypeFileEntry[] {
   const entry = project.doctypes[doctypeKey]
 
-  if (!entry.inSubcontext) {
+  if (entry.role === DoctypeRole.Subcontext) {
+    return listBriefFiles(entry.dir)
+  }
+
+  if (entry.role !== DoctypeRole.Managed) {
     let files: string[] = []
     try {
       files = readdirSync(entry.dir)
@@ -291,10 +372,10 @@ export function listDoctypeFilesAcrossSubcontexts(
     return [{ dir: entry.dir, files }]
   }
 
-  const rawSubcontextsDir = project.rawConfig.subcontexts!.dir
-  const subcontextsAbsDir = isAbsolute(rawSubcontextsDir)
-    ? rawSubcontextsDir
-    : join(project.projectDir, rawSubcontextsDir)
+  // managed doctype: scan across all subcontexts
+  const subDoctypeKey = project.rawConfig.subcontextDoctype!
+  const subEntry = project.doctypes[subDoctypeKey]
+  const subcontextsAbsDir = subEntry.dir
 
   const subDirs = listSubcontexts(subcontextsAbsDir)
   const rawDoctypeDir = project.rawConfig.doctypes[doctypeKey].dir

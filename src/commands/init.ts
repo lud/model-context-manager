@@ -1,301 +1,220 @@
 import { command } from "cleye"
 import * as p from "@clack/prompts"
 import { existsSync } from "node:fs"
-import { join, resolve } from "node:path"
-import { writeFileSyncOrAbort } from "../lib/fs.js"
-import { locateProjectFile, loadJSONFile, parseProject } from "../lib/project.js"
+import { join } from "node:path"
+import type { RawConfig, RawDoctypeEntry } from "../lib/raw-config.js"
 import { SCHEMA_URL } from "../lib/schema-url.js"
-import type { RawConfig, RawDoctypeEntry, RawSubcontexts } from "../lib/raw-config.js"
-import { getTemplates } from "../lib/templates.js"
+import { locateProjectFile, ProjectSchema } from "../lib/project.js"
+import { readFileSyncOrAbort, writeFileSyncOrAbort } from "../lib/fs.js"
 
-export type { RawConfig, RawDoctypeEntry, RawSubcontexts }
+const CONFIG_FILE = ".mcm.json"
 
-export type SequenceScheme = "000" | "datetime" | "none"
+export function serializeConfig(config: RawConfig): string {
+  const out: Record<string, unknown> = { $schema: SCHEMA_URL }
 
-export function buildDoctypeConfig(
-  name: string,
-  dir: string,
-  scheme: SequenceScheme,
-): RawDoctypeEntry {
-  const entry: RawDoctypeEntry = { dir }
-  if (scheme !== "000") {
-    entry.sequenceScheme = scheme
+  if (config.subcontextDoctype) {
+    out.subcontextDoctype = config.subcontextDoctype
   }
-  return entry
-}
 
-export function mergeConfigs(base: RawConfig, patch: RawConfig): RawConfig {
-  return {
-    ...base,
-    doctypes: { ...(base.doctypes ?? {}), ...(patch.doctypes ?? {}) },
-    subcontexts: patch.subcontexts ?? base.subcontexts,
-  }
-}
-
-export function configToJson(config: RawConfig): string {
-  const output: Record<string, unknown> = {
-    $schema: SCHEMA_URL,
+  if (config.managedDoctypes && config.managedDoctypes.length > 0) {
+    out.managedDoctypes = config.managedDoctypes
   }
 
   if (config.doctypes && Object.keys(config.doctypes).length > 0) {
-    const cleanDoctypes: Record<string, RawDoctypeEntry> = {}
-    for (const [key, val] of Object.entries(config.doctypes)) {
-      const clean: RawDoctypeEntry = { dir: val.dir }
-      if (val.sequenceScheme && val.sequenceScheme !== "000") {
-        clean.sequenceScheme = val.sequenceScheme
-      }
-      if (val.sequenceSeparator && val.sequenceSeparator !== ".") {
-        clean.sequenceSeparator = val.sequenceSeparator
-      }
-      cleanDoctypes[key] = clean
+    out.doctypes = config.doctypes
+  }
+
+  if (config.sync && Array.isArray(config.sync) && config.sync.length > 0) {
+    out.sync = config.sync
+  }
+
+  return JSON.stringify(out, null, 2) + "\n"
+}
+
+export async function resolveConflict(
+  cwd: string,
+): Promise<{ mode: "update" | "overwrite" | "fresh"; base: RawConfig }> {
+  const localPath = join(cwd, CONFIG_FILE)
+
+  if (existsSync(localPath)) {
+    const action = await p.select({
+      message: `${CONFIG_FILE} already exists. What would you like to do?`,
+      options: [
+        { value: "update", label: "Update existing config" },
+        { value: "overwrite", label: "Overwrite with new config" },
+        { value: "cancel", label: "Cancel" },
+      ],
+      initialValue: "update" as string,
+    })
+
+    if (p.isCancel(action) || action === "cancel") {
+      p.cancel("Init cancelled.")
+      process.exit(0)
     }
-    output.doctypes = cleanDoctypes
+
+    if (action === "overwrite") {
+      return { mode: "overwrite", base: {} }
+    }
+
+    // update mode — try to parse existing
+    let parsed: RawConfig
+    try {
+      const content = readFileSyncOrAbort(localPath, "utf-8")
+      parsed = JSON.parse(content) as RawConfig
+    } catch {
+      p.log.warning("Could not parse existing config file.")
+      const overwrite = await p.confirm({
+        message: "Overwrite with a new config?",
+      })
+      if (p.isCancel(overwrite) || !overwrite) {
+        p.cancel("Init cancelled.")
+        process.exit(0)
+      }
+      return { mode: "overwrite", base: {} }
+    }
+
+    return { mode: "update", base: parsed }
   }
 
-  if (config.sync && config.sync.length > 0) {
-    output.sync = config.sync
+  // No local file — check for parent
+  const parentPath = locateProjectFile(cwd)
+  if (parentPath) {
+    p.log.warning(`Found parent config at ${parentPath}`)
+    const proceed = await p.confirm({
+      message: "Create a local config file anyway?",
+    })
+    if (p.isCancel(proceed) || !proceed) {
+      p.cancel("Init cancelled.")
+      process.exit(0)
+    }
   }
 
-  if (config.subcontexts) {
-    output.subcontexts = config.subcontexts
-  }
-
-  return JSON.stringify(output, null, 2)
+  return { mode: "fresh", base: {} }
 }
 
-// --- prompt helpers ---
-
-function cancelAndExit(): never {
-  p.cancel("Cancelled.")
-  process.exit(0)
-}
-
-async function runTemplateFlow(configPath: string): Promise<void> {
-  const templates = getTemplates()
-  const templateId = await p.select({
-    message: "Pick a template",
-    options: templates.map((t) => ({ value: t.id, label: t.label, hint: t.hint })),
-  })
-
-  if (p.isCancel(templateId)) cancelAndExit()
-
-  const template = templates.find((t) => t.id === templateId)!
-  writeFileSyncOrAbort(configPath, configToJson(template.config))
-  p.outro("Created .mcm.json")
+function validateCandidate(candidate: RawConfig): string | undefined {
+  const result = ProjectSchema.safeParse(candidate)
+  if (result.success) return undefined
+  return result.error.issues[0].message
 }
 
 export async function promptDoctype(
-  subcontextsDir: string | undefined,
-  existingNames?: Set<string>,
-): Promise<{ name: string; entry: RawDoctypeEntry; managedBySubcontext: boolean }> {
+  config: RawConfig,
+): Promise<{ name: string; entry: RawDoctypeEntry; role: "regular" | "subcontext" | "managed" } | null> {
+  const addMore = await p.confirm({
+    message: "Add a doctype?",
+  })
+  if (p.isCancel(addMore) || !addMore) return null
+
+  const existingNames = new Set(Object.keys(config.doctypes ?? {}))
+
   const name = await p.text({
-    message: "Doctype name",
-    validate: (value = "") => {
-      if (!value.trim()) return "Name is required"
-      if (!/^[A-Za-z0-9._-]+$/.test(value.trim())) {
-        return "Only letters, digits, dots, hyphens, and underscores are allowed"
+    message: "Doctype name:",
+    validate(value = "") {
+      if (existingNames.has(value)) {
+        return `Doctype "${value}" already exists`
       }
-      if (existingNames?.has(value.trim())) {
-        return `Doctype "${value.trim()}" already exists`
+      // Validate name through the project schema with a temporary
+      // unique dir to avoid false duplicate-directory errors
+      const placeholderDir = `__placeholder_${Math.random()}`
+      const candidate: RawConfig = {
+        ...config,
+        doctypes: { ...config.doctypes, [value]: { dir: placeholderDir } },
       }
+      return validateCandidate(candidate)
     },
   })
+  if (p.isCancel(name)) {
+    p.cancel("Init cancelled.")
+    process.exit(0)
+  }
 
-  if (p.isCancel(name)) cancelAndExit()
+  let role: "regular" | "subcontext" | "managed" = "regular"
 
-  const doctypeName = name.trim()
-
-  let managedBySubcontext = false
-  if (subcontextsDir) {
-    const subManaged = await p.confirm({
-      message: "Managed by subcontexts?",
+  if (!config.subcontextDoctype) {
+    const isSubcontext = await p.confirm({
+      message: "Should this be the subcontext doctype?",
       initialValue: false,
     })
-    if (p.isCancel(subManaged)) cancelAndExit()
-    managedBySubcontext = subManaged
+    if (p.isCancel(isSubcontext)) {
+      p.cancel("Init cancelled.")
+      process.exit(0)
+    }
+    if (isSubcontext) role = "subcontext"
+  } else {
+    const isManaged = await p.confirm({
+      message: "Should this be a managed doctype?",
+      initialValue: false,
+    })
+    if (p.isCancel(isManaged)) {
+      p.cancel("Init cancelled.")
+      process.exit(0)
+    }
+    if (isManaged) role = "managed"
   }
 
-  if (managedBySubcontext) {
-    p.log.info(`Directory is relative to each subcontext (e.g. \`${doctypeName}\`)`)
-  } else {
-    p.log.info(`Directory is relative to project root (e.g. \`context/${doctypeName}\`)`)
-  }
+  const dirMessage =
+    role === "subcontext"
+      ? "Directory for subcontext containers:"
+      : role === "managed"
+        ? "Directory inside each subcontext (relative to subcontext dir):"
+        : "Directory for files:"
 
   const dir = await p.text({
-    message: "Directory",
-    placeholder: doctypeName,
-    initialValue: doctypeName,
-  })
-
-  if (p.isCancel(dir)) cancelAndExit()
-
-  const dirValue = dir || doctypeName
-
-  const scheme = await p.select<SequenceScheme>({
-    message: "Sequence scheme",
-    options: [
-      { value: "000", label: "000 (numbered)", hint: "e.g. 001.my-note.md" },
-      { value: "datetime", label: "datetime", hint: "e.g. 20240101120000.my-note.md" },
-      { value: "none", label: "none", hint: "e.g. my-note.md" },
-    ],
-  })
-
-  if (p.isCancel(scheme)) cancelAndExit()
-
-  const resolvedPath = managedBySubcontext
-    ? `${subcontextsDir}/★/${dirValue}/`
-    : `${dirValue}/`
-  p.log.info(`→ ${resolvedPath}`)
-
-  return { name: doctypeName, entry: buildDoctypeConfig(doctypeName, dirValue, scheme), managedBySubcontext }
-}
-
-/**
- * Prompts the user to configure doctypes and subcontexts, then patches `baseJson` in place
- * and writes it to `configPath`. For a fresh config, pass `{ $schema: SCHEMA_URL }` as the
- * base. For an update, pass the existing raw JSON — all other fields are preserved unchanged.
- */
-async function runCustomFlow(
-  configPath: string,
-  baseJson: Record<string, unknown>,
-  existingDoctypes: Record<string, unknown>,
-  existingSubcontexts: { dir: string; doctypes: string[] } | undefined,
-  updateMode: boolean,
-): Promise<void> {
-  let subcontextsDir: string | undefined = existingSubcontexts?.dir
-
-  if (!existingSubcontexts) {
-    const useSubcontexts = await p.confirm({
-      message: "Use subcontexts?",
-      initialValue: false,
-    })
-    if (p.isCancel(useSubcontexts)) cancelAndExit()
-
-    if (useSubcontexts) {
-      const subDir = await p.text({
-        message: "Subcontexts directory",
-        placeholder: "features",
-        initialValue: "features",
-      })
-      if (p.isCancel(subDir)) cancelAndExit()
-      subcontextsDir = subDir || "features"
-    }
-  }
-
-  const existingNames = new Set(Object.keys(existingDoctypes))
-  const newDoctypes: Record<string, RawDoctypeEntry> = {}
-  const subcontextManagedDoctypes: string[] = []
-
-  let addDoctype = await p.confirm({ message: "Add a doctype?", initialValue: true })
-  if (p.isCancel(addDoctype)) cancelAndExit()
-
-  while (addDoctype) {
-    const { name, entry, managedBySubcontext } = await promptDoctype(subcontextsDir, existingNames)
-    newDoctypes[name] = entry
-    existingNames.add(name)
-    if (managedBySubcontext) subcontextManagedDoctypes.push(name)
-
-    const another = await p.confirm({ message: "Add another doctype?", initialValue: false })
-    if (p.isCancel(another)) cancelAndExit()
-    addDoctype = another
-  }
-
-  // Patch only what changed; everything else in baseJson is preserved as-is.
-  if (Object.keys(newDoctypes).length > 0) {
-    baseJson.doctypes = { ...existingDoctypes, ...newDoctypes }
-  }
-
-  if (subcontextsDir && subcontextManagedDoctypes.length > 0) {
-    const existingManaged = existingSubcontexts?.doctypes ?? []
-    baseJson.subcontexts = {
-      dir: subcontextsDir,
-      doctypes: [...existingManaged, ...subcontextManagedDoctypes],
-    }
-  }
-
-  writeFileSyncOrAbort(configPath, JSON.stringify(baseJson, null, 2))
-  p.outro(updateMode ? "Updated .mcm.json" : "Created .mcm.json")
-}
-
-// --- main entry point ---
-
-export async function runInit(): Promise<void> {
-  const cwd = process.cwd()
-  const configPath = join(cwd, ".mcm.json")
-
-  let updateMode = false
-  let baseJson: Record<string, unknown> = { $schema: SCHEMA_URL }
-
-  if (existsSync(configPath)) {
-    const choice = await p.select({
-      message: ".mcm.json already exists here. What do you want to do?",
-      options: [
-        { value: "cancel", label: "Cancel" },
-        { value: "overwrite", label: "Overwrite", hint: "Start fresh" },
-        { value: "update", label: "Update", hint: "Add new doctypes to existing config" },
-      ],
-    })
-
-    if (p.isCancel(choice) || choice === "cancel") cancelAndExit()
-
-    if (choice === "update") {
-      updateMode = true
-      try {
-        baseJson = loadJSONFile(configPath) as Record<string, unknown>
-      } catch {
-        baseJson = { $schema: SCHEMA_URL }
+    message: dirMessage,
+    defaultValue: name,
+    placeholder: name,
+    validate(value = "") {
+      const dirValue = value || name
+      const candidate: RawConfig = {
+        ...config,
+        doctypes: { ...config.doctypes, [name]: { dir: dirValue } },
       }
-    }
-  } else {
-    const parentConfig = locateProjectFile(resolve(cwd, ".."))
-    if (parentConfig) {
-      const confirmed = await p.confirm({
-        message: `A config already exists at ${parentConfig}. Create a nested config here?`,
-      })
-      if (p.isCancel(confirmed) || !confirmed) cancelAndExit()
-    }
+      return validateCandidate(candidate)
+    },
+  })
+  if (p.isCancel(dir)) {
+    p.cancel("Init cancelled.")
+    process.exit(0)
   }
 
-  p.intro("Initialize MCM project")
-
-  if (!updateMode) {
-    const startChoice = await p.select({
-      message: "How do you want to start?",
-      options: [
-        { value: "template", label: "From a template" },
-        { value: "custom", label: "Custom setup" },
-      ],
-    })
-
-    if (p.isCancel(startChoice)) cancelAndExit()
-
-    if (startChoice === "template") {
-      await runTemplateFlow(configPath)
-      return
-    }
-  }
-
-  // Extract existing doctypes/subcontexts from baseJson for conflict detection and subcontext merging.
-  // We parse through Zod to get normalized values; fall back to empty on error.
-  let existingDoctypes: Record<string, unknown> = {}
-  let existingSubcontexts: { dir: string; doctypes: string[] } | undefined
-  try {
-    const parsed = parseProject(baseJson)
-    existingDoctypes = parsed.doctypes as unknown as Record<string, unknown>
-    existingSubcontexts = parsed.subcontexts
-  } catch {
-    // leave defaults
-  }
-
-  await runCustomFlow(configPath, baseJson, existingDoctypes, existingSubcontexts, updateMode)
+  return { name, entry: { dir: dir || name }, role }
 }
 
 export const initCommand = command(
   {
     name: "init",
-    help: { description: "Initialize a new MCM project" },
+    help: { description: "Initialize or update an .mcm.json config file" },
   },
   async () => {
-    await runInit()
+    const cwd = process.cwd()
+
+    p.intro("mcm init")
+
+    const { base } = await resolveConflict(cwd)
+
+    const config: RawConfig = { ...base }
+    if (!config.doctypes) config.doctypes = {}
+    if (!config.managedDoctypes) config.managedDoctypes = []
+
+    for (;;) {
+      const result = await promptDoctype(config)
+      if (!result) break
+
+      config.doctypes[result.name] = result.entry
+
+      if (result.role === "subcontext") {
+        config.subcontextDoctype = result.name
+      } else if (result.role === "managed") {
+        const existing: string[] = config.managedDoctypes ?? []
+        config.managedDoctypes = [...existing, result.name]
+      }
+    }
+
+    const output = serializeConfig(config)
+    const outPath = join(cwd, CONFIG_FILE)
+    writeFileSyncOrAbort(outPath, output)
+
+    p.outro(`Wrote ${CONFIG_FILE}`)
   },
 )

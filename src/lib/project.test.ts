@@ -1,6 +1,7 @@
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest"
 import { ZodError } from "zod"
 import {
+  DoctypeRole,
   loadRawProject,
   getProject,
   listDoctypeFilesAcrossSubcontexts,
@@ -31,7 +32,12 @@ afterAll(() => {
 
 describe("parseProject", () => {
   it("returns default project for empty object", () => {
-    expect(parseProject({})).toEqual({ extend: false, doctypes: {}, sync: [] })
+    expect(parseProject({})).toEqual({
+      extend: false,
+      doctypes: {},
+      sync: [],
+      managedDoctypes: [],
+    })
   })
 
   it("respects extend: true when provided", () => {
@@ -39,6 +45,7 @@ describe("parseProject", () => {
       extend: true,
       doctypes: {},
       sync: [],
+      managedDoctypes: [],
     })
   })
 
@@ -59,6 +66,7 @@ describe("parseProject", () => {
       extend: false,
       doctypes: {},
       sync: [],
+      managedDoctypes: [],
     })
   })
 
@@ -69,6 +77,7 @@ describe("parseProject", () => {
       extend: false,
       doctypes: {},
       sync: [],
+      managedDoctypes: [],
     })
   })
 
@@ -175,28 +184,63 @@ describe("parseProject", () => {
   })
 })
 
-describe("parseProject subcontexts", () => {
-  it("accepts valid subcontexts config", () => {
+describe("parseProject subcontextDoctype", () => {
+  it("accepts valid subcontextDoctype config", () => {
     const result = parseProject({
-      doctypes: { notes: { dir: "notes" } },
-      subcontexts: { dir: "features", doctypes: ["notes"] },
+      doctypes: {
+        features: { dir: "features" },
+        notes: { dir: "notes" },
+      },
+      subcontextDoctype: "features",
+      managedDoctypes: ["notes"],
     })
-    expect(result.subcontexts).toEqual({
-      dir: "features",
-      doctypes: ["notes"],
-    })
+    expect(result.subcontextDoctype).toBe("features")
+    expect(result.managedDoctypes).toEqual(["notes"])
   })
 
-  it("subcontexts is optional", () => {
+  it("subcontextDoctype is optional", () => {
     const result = parseProject({})
-    expect(result.subcontexts).toBeUndefined()
+    expect(result.subcontextDoctype).toBeUndefined()
   })
 
-  it("throws when subcontexts.doctypes is empty", () => {
+  it("managedDoctypes defaults to empty array", () => {
+    const result = parseProject({})
+    expect(result.managedDoctypes).toEqual([])
+  })
+
+  it("rejects 'sub' as a doctype name", () => {
+    expect(() =>
+      parseProject({
+        doctypes: { sub: { dir: "sub" } },
+      }),
+    ).toThrow(ZodError)
+  })
+
+  it("rejects subcontextDoctype referencing unknown doctype", () => {
     expect(() =>
       parseProject({
         doctypes: { notes: { dir: "notes" } },
-        subcontexts: { dir: "features", doctypes: [] },
+        subcontextDoctype: "features",
+      }),
+    ).toThrow(ZodError)
+  })
+
+  it("rejects subcontextDoctype appearing in managedDoctypes", () => {
+    expect(() =>
+      parseProject({
+        doctypes: { features: { dir: "features" } },
+        subcontextDoctype: "features",
+        managedDoctypes: ["features"],
+      }),
+    ).toThrow(ZodError)
+  })
+
+  it("rejects managedDoctypes referencing unknown doctype", () => {
+    expect(() =>
+      parseProject({
+        doctypes: { features: { dir: "features" } },
+        subcontextDoctype: "features",
+        managedDoctypes: ["nonexistent"],
       }),
     ).toThrow(ZodError)
   })
@@ -328,13 +372,13 @@ describe("loadRawProject", () => {
     expect(project.currentSubcontext).toBe(false)
   })
 
-  it("sets inSubcontext false on all doctypes when no subcontexts configured", () => {
+  it("sets role to regular on all doctypes when no subcontextDoctype configured", () => {
     const project = loadRawProject(
       { doctypes: { notes: { dir: "notes" } } },
       "/some/project/.mcm.json",
     )
     for (const entry of Object.values(project.doctypes)) {
-      expect(entry.inSubcontext).toBe(false)
+      expect(entry.role).toBe(DoctypeRole.Regular)
     }
   })
 
@@ -353,20 +397,23 @@ describe("loadRawProject", () => {
   })
 })
 
-describe("loadRawProject with subcontexts", () => {
+describe("loadRawProject with subcontextDoctype", () => {
   const projectFile = "/some/project/.mcm.json"
   const raw = {
     doctypes: {
+      features: { dir: "features" },
       notes: { dir: "notes" },
       devlogs: { dir: "context/devlogs" },
     },
-    subcontexts: { dir: "features", doctypes: ["notes"] },
+    subcontextDoctype: "features",
+    managedDoctypes: ["notes"],
   }
 
-  it("marks managed doctypes with inSubcontext true", () => {
+  it("marks doctypes with correct roles", () => {
     const project = loadRawProject(raw, projectFile)
-    expect(project.doctypes.notes.inSubcontext).toBe(true)
-    expect(project.doctypes.devlogs.inSubcontext).toBe(false)
+    expect(project.doctypes.features.role).toBe(DoctypeRole.Subcontext)
+    expect(project.doctypes.notes.role).toBe(DoctypeRole.Managed)
+    expect(project.doctypes.devlogs.role).toBe(DoctypeRole.Regular)
   })
 
   it("resolves managed doctype dir through subcontext when provided", () => {
@@ -377,6 +424,13 @@ describe("loadRawProject with subcontexts", () => {
       "/some/project/features/001.test-feature/notes",
     )
     expect(project.currentSubcontext).toBe("001.test-feature")
+  })
+
+  it("resolves subcontext doctype dir to its own dir (not nested)", () => {
+    const project = loadRawProject(raw, projectFile, {
+      subcontext: "001.test-feature",
+    })
+    expect(project.doctypes.features.dir).toBe("/some/project/features")
   })
 
   it("resolves non-managed doctype dir normally even with subcontext", () => {
@@ -391,16 +445,78 @@ describe("loadRawProject with subcontexts", () => {
     expect(project.doctypes.notes.dir).toBe("/some/project/notes")
   })
 
-  it("throws when subcontexts references nonexistent doctype", () => {
+  it("throws when subcontextDoctype references nonexistent doctype", () => {
     expect(() =>
       loadRawProject(
         {
           doctypes: { notes: { dir: "notes" } },
-          subcontexts: { dir: "features", doctypes: ["nonexistent"] },
+          subcontextDoctype: "nonexistent",
         },
         projectFile,
       ),
-    ).toThrow('Subcontexts references unknown doctype: "nonexistent"')
+    ).toThrow(ZodError)
+  })
+
+  it("throws when managedDoctypes references nonexistent doctype", () => {
+    expect(() =>
+      loadRawProject(
+        {
+          doctypes: { features: { dir: "features" } },
+          subcontextDoctype: "features",
+          managedDoctypes: ["nonexistent"],
+        },
+        projectFile,
+      ),
+    ).toThrow(ZodError)
+  })
+
+  it("throws when two doctypes share the same directory", () => {
+    expect(() =>
+      loadRawProject(
+        {
+          doctypes: {
+            notes: { dir: "shared" },
+            tasks: { dir: "shared" },
+          },
+        },
+        projectFile,
+      ),
+    ).toThrow(ZodError)
+  })
+
+  it("includes doctype names in duplicate directory error message", () => {
+    try {
+      loadRawProject(
+        {
+          doctypes: {
+            notes: { dir: "shared" },
+            tasks: { dir: "shared" },
+          },
+        },
+        projectFile,
+      )
+      expect.unreachable("should have thrown")
+    } catch (err) {
+      expect(err).toBeInstanceOf(ZodError)
+      const message = (err as ZodError).issues[0].message
+      expect(message).toContain("notes")
+      expect(message).toContain("tasks")
+      expect(message).toContain("shared")
+    }
+  })
+
+  it("allows different directories across doctypes", () => {
+    expect(() =>
+      loadRawProject(
+        {
+          doctypes: {
+            notes: { dir: "notes" },
+            tasks: { dir: "tasks" },
+          },
+        },
+        projectFile,
+      ),
+    ).not.toThrow()
   })
 })
 
@@ -507,7 +623,7 @@ describe("listDoctypeFilesAcrossSubcontexts", () => {
     "../../test/fixtures/doctypes/multi-subcontext",
   )
 
-  it("returns single entry for non-subcontext doctype", () => {
+  it("returns single entry for regular doctype", () => {
     const project = loadRawProject(
       { doctypes: { notes: { dir: "notes" } } },
       "/nonexistent/.mcm.json",
@@ -518,11 +634,15 @@ describe("listDoctypeFilesAcrossSubcontexts", () => {
     expect(result[0].files).toEqual([]) // missing dir treated as empty
   })
 
-  it("returns entries for all subcontexts", () => {
+  it("returns entries for all subcontexts (managed doctype)", () => {
     const project = loadRawProject(
       {
-        doctypes: { notes: { dir: "notes" } },
-        subcontexts: { dir: "features", doctypes: ["notes"] },
+        doctypes: {
+          features: { dir: "features" },
+          notes: { dir: "notes" },
+        },
+        subcontextDoctype: "features",
+        managedDoctypes: ["notes"],
       },
       join(fixtureBase, ".mcm.json"),
     )
@@ -536,8 +656,12 @@ describe("listDoctypeFilesAcrossSubcontexts", () => {
   it("returns empty files for subcontext dirs without the doctype directory", () => {
     const project = loadRawProject(
       {
-        doctypes: { notes: { dir: "notes" } },
-        subcontexts: { dir: "features", doctypes: ["notes"] },
+        doctypes: {
+          features: { dir: "features" },
+          notes: { dir: "notes" },
+        },
+        subcontextDoctype: "features",
+        managedDoctypes: ["notes"],
       },
       join(fixtureBase, ".mcm.json"),
     )
@@ -549,8 +673,12 @@ describe("listDoctypeFilesAcrossSubcontexts", () => {
   it("returns empty array when subcontexts dir does not exist", () => {
     const project = loadRawProject(
       {
-        doctypes: { notes: { dir: "notes" } },
-        subcontexts: { dir: "nonexistent-features", doctypes: ["notes"] },
+        doctypes: {
+          features: { dir: "nonexistent-features" },
+          notes: { dir: "notes" },
+        },
+        subcontextDoctype: "features",
+        managedDoctypes: ["notes"],
       },
       "/some/.mcm.json",
     )

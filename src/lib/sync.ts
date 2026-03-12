@@ -1,7 +1,6 @@
 import {
   copyFileSync,
   existsSync,
-  mkdirSync,
   mkdtempSync,
   readdirSync,
   rmSync,
@@ -9,6 +8,7 @@ import {
 } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
+import { mkdirSyncOrAbort } from "./fs.js"
 import type { GitHubUpstream, LocalFsUpstream } from "./project.js"
 import { cloneRepo } from "./github.js"
 
@@ -141,7 +141,7 @@ export function applyCopy(
   }
 
   if (source.type === "file") {
-    mkdirSync(join(local, ".."), { recursive: true })
+    mkdirSyncOrAbort(join(local, ".."), { recursive: true })
     copyFileSync(source.path, local)
     reporter.onCopied(local)
     return { status: "synced" }
@@ -157,7 +157,7 @@ function copyDirContents(
   mode: "receive_merge" | "receive_mirror",
   reporter: SyncReporter,
 ): void {
-  mkdirSync(targetDir, { recursive: true })
+  mkdirSyncOrAbort(targetDir, { recursive: true })
 
   const sourceEntries = new Set(readdirSync(sourceDir))
 

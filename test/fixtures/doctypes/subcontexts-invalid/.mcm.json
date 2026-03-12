@@ -2,8 +2,6 @@
   "doctypes": {
     "notes": { "dir": "notes" }
   },
-  "subcontexts": {
-    "dir": "features",
-    "doctypes": ["nonexistent"]
-  }
+  "subcontextDoctype": "features",
+  "managedDoctypes": ["nonexistent"]
 }

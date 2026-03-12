@@ -1,382 +1,567 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
-import { tmpdir } from "node:os"
 import * as p from "@clack/prompts"
-import * as fs from "../lib/fs.js"
-import * as project from "../lib/project.js"
 import {
-  buildDoctypeConfig,
-  configToJson,
-  mergeConfigs,
-  runInit,
+  serializeConfig,
+  resolveConflict,
+  promptDoctype,
+  initCommand,
 } from "./init.js"
-import { getTemplates } from "../lib/templates.js"
+import type { RawConfig } from "../lib/raw-config.js"
 import { SCHEMA_URL } from "../lib/schema-url.js"
 
 vi.mock("@clack/prompts")
 vi.mock("../lib/fs.js")
-vi.mock("../lib/project.js")
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>
+  return { ...actual, existsSync: vi.fn(() => false) }
+})
 
-let tempDir: string
+// Grab mocked modules
+import { existsSync } from "node:fs"
+import { readFileSyncOrAbort, writeFileSyncOrAbort } from "../lib/fs.js"
+
+// locateProjectFile is used by resolveConflict — mock it directly
+vi.mock("../lib/project.js", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>
+  return { ...actual, locateProjectFile: vi.fn(() => null) }
+})
+import { locateProjectFile } from "../lib/project.js"
 
 beforeEach(() => {
-  tempDir = mkdtempSync(join(tmpdir(), "mcm-init-test-"))
-  vi.spyOn(process, "cwd").mockReturnValue(tempDir)
-  vi.mocked(project.locateProjectFile).mockReturnValue(null)
-  vi.mocked(fs.writeFileSyncOrAbort).mockReturnValue(undefined)
+  vi.mocked(p.isCancel).mockReturnValue(false)
+  vi.mocked(p.cancel).mockImplementation(() => {})
+  vi.mocked(p.intro).mockImplementation(() => {})
+  vi.mocked(p.outro).mockImplementation(() => {})
+  vi.mocked(p.log).warning = vi.fn()
+  vi.mocked(p.log).step = vi.fn()
 })
 
 afterEach(() => {
-  vi.spyOn(process, "cwd").mockRestore()
-  rmSync(tempDir, { recursive: true, force: true })
   vi.resetAllMocks()
 })
 
-// Helper: write a real .mcm.json to tempDir
-function writeProjectFile(content: object) {
-  writeFileSync(join(tempDir, ".mcm.json"), JSON.stringify(content))
-}
+// ---------------------------------------------------------------------------
+// serializeConfig
+// ---------------------------------------------------------------------------
 
-describe("getTemplates", () => {
-  it("includes notes and feature-project templates", () => {
-    const ids = getTemplates().map((t) => t.id)
-    expect(ids).toContain("notes")
-    expect(ids).toContain("feature-project")
-  })
-
-  it("does not include a blank template", () => {
-    const ids = getTemplates().map((t) => t.id)
-    expect(ids).not.toContain("blank")
-  })
-
-  it("feature-project template has subcontexts with specs and tasks", () => {
-    const tmpl = getTemplates().find((t) => t.id === "feature-project")!
-    expect(tmpl.config.subcontexts?.dir).toBe("features")
-    expect(tmpl.config.subcontexts?.doctypes).toContain("specs")
-    expect(tmpl.config.subcontexts?.doctypes).toContain("tasks")
-  })
-})
-
-describe("buildDoctypeConfig", () => {
-  it("omits sequenceScheme when scheme is 000 (default)", () => {
-    const result = buildDoctypeConfig("notes", "notes", "000")
-    expect(result).toEqual({ dir: "notes" })
-    expect(result.sequenceScheme).toBeUndefined()
-  })
-
-  it("includes sequenceScheme for datetime", () => {
-    const result = buildDoctypeConfig("notes", "notes", "datetime")
-    expect(result.sequenceScheme).toBe("datetime")
-  })
-
-  it("includes sequenceScheme for none", () => {
-    const result = buildDoctypeConfig("notes", "notes", "none")
-    expect(result.sequenceScheme).toBe("none")
-  })
-})
-
-describe("mergeConfigs", () => {
-  it("merges doctypes from patch into base", () => {
-    const base = { doctypes: { a: { dir: "a" } } }
-    const patch = { doctypes: { b: { dir: "b" } } }
-    const result = mergeConfigs(base, patch)
-    expect(result.doctypes).toEqual({ a: { dir: "a" }, b: { dir: "b" } })
-  })
-
-  it("patch subcontexts overrides base subcontexts", () => {
-    const base = { subcontexts: { dir: "features", doctypes: ["a"] } }
-    const patch = { doctypes: {}, subcontexts: { dir: "sprints", doctypes: ["b"] } }
-    const result = mergeConfigs(base, patch)
-    expect(result.subcontexts).toEqual({ dir: "sprints", doctypes: ["b"] })
-  })
-
-  it("keeps base subcontexts when patch has none", () => {
-    const base = { subcontexts: { dir: "features", doctypes: ["a"] } }
-    const patch = { doctypes: { b: { dir: "b" } } }
-    const result = mergeConfigs(base, patch)
-    expect(result.subcontexts).toEqual({ dir: "features", doctypes: ["a"] })
-  })
-})
-
-describe("configToJson", () => {
+describe("serializeConfig", () => {
   it("always includes $schema", () => {
-    const json = configToJson({})
-    const parsed = JSON.parse(json)
+    const result = serializeConfig({})
+    const parsed = JSON.parse(result)
     expect(parsed.$schema).toBe(SCHEMA_URL)
   })
 
-  it("omits doctypes key when empty", () => {
-    const json = configToJson({})
-    const parsed = JSON.parse(json)
+  it("omits empty doctypes", () => {
+    const result = serializeConfig({ doctypes: {} })
+    const parsed = JSON.parse(result)
     expect(parsed.doctypes).toBeUndefined()
   })
 
-  it("omits default sequenceScheme (000)", () => {
-    const json = configToJson({ doctypes: { notes: { dir: "notes", sequenceScheme: "000" } } })
-    const parsed = JSON.parse(json)
-    expect(parsed.doctypes.notes.sequenceScheme).toBeUndefined()
+  it("omits empty managedDoctypes", () => {
+    const result = serializeConfig({ managedDoctypes: [] })
+    const parsed = JSON.parse(result)
+    expect(parsed.managedDoctypes).toBeUndefined()
   })
 
-  it("omits default sequenceSeparator (.)", () => {
-    const json = configToJson({ doctypes: { notes: { dir: "notes", sequenceSeparator: "." } } })
-    const parsed = JSON.parse(json)
-    expect(parsed.doctypes.notes.sequenceSeparator).toBeUndefined()
-  })
-
-  it("preserves non-default sequenceScheme", () => {
-    const json = configToJson({ doctypes: { notes: { dir: "notes", sequenceScheme: "datetime" } } })
-    const parsed = JSON.parse(json)
-    expect(parsed.doctypes.notes.sequenceScheme).toBe("datetime")
-  })
-
-  it("includes subcontexts when present", () => {
-    const json = configToJson({ subcontexts: { dir: "features", doctypes: ["notes"] } })
-    const parsed = JSON.parse(json)
-    expect(parsed.subcontexts).toEqual({ dir: "features", doctypes: ["notes"] })
-  })
-
-  it("includes sync when non-empty", () => {
-    const sync = [{ upstream: "other/path", local: "local/path", mode: "receive_merge" as const }]
-    const json = configToJson({ sync })
-    const parsed = JSON.parse(json)
-    expect(parsed.sync).toEqual(sync)
-  })
-
-  it("omits sync when empty array", () => {
-    const json = configToJson({ sync: [] })
-    const parsed = JSON.parse(json)
+  it("omits empty sync", () => {
+    const result = serializeConfig({ sync: [] })
+    const parsed = JSON.parse(result)
     expect(parsed.sync).toBeUndefined()
   })
-})
 
-describe("runInit — template path", () => {
-  beforeEach(() => {
-    vi.mocked(p.select).mockResolvedValueOnce("template")
+  it("preserves sync when present", () => {
+    const config: RawConfig = {
+      sync: [{ upstream: "/some/path", local: "dest", mode: "receive_merge" }] as unknown[],
+    }
+    const result = serializeConfig(config)
+    const parsed = JSON.parse(result)
+    expect(parsed.sync).toHaveLength(1)
   })
 
-  it("applies notes template and writes file", async () => {
-    vi.mocked(p.select).mockResolvedValueOnce("notes")
+  it("includes subcontextDoctype when set", () => {
+    const result = serializeConfig({ subcontextDoctype: "projects" })
+    const parsed = JSON.parse(result)
+    expect(parsed.subcontextDoctype).toBe("projects")
+  })
 
-    await runInit()
+  it("includes doctypes when non-empty", () => {
+    const result = serializeConfig({
+      doctypes: { notes: { dir: "notes" } },
+    })
+    const parsed = JSON.parse(result)
+    expect(parsed.doctypes.notes).toEqual({ dir: "notes" })
+  })
 
-    expect(fs.writeFileSyncOrAbort).toHaveBeenCalledWith(
-      join(tempDir, ".mcm.json"),
-      expect.stringContaining('"notes"'),
+  it("ends with newline", () => {
+    expect(serializeConfig({})).toMatch(/\n$/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// resolveConflict
+// ---------------------------------------------------------------------------
+
+describe("resolveConflict", () => {
+  it("returns fresh when no local or parent config exists", async () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+    vi.mocked(locateProjectFile).mockReturnValue(null)
+
+    const result = await resolveConflict("/tmp/test")
+    expect(result).toEqual({ mode: "fresh", base: {} })
+  })
+
+  it("returns update with parsed base when user chooses update", async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(p.select).mockResolvedValue("update")
+    vi.mocked(readFileSyncOrAbort).mockReturnValue(
+      JSON.stringify({ doctypes: { notes: { dir: "notes" } } }),
     )
-    expect(p.outro).toHaveBeenCalledWith("Created .mcm.json")
+
+    const result = await resolveConflict("/tmp/test")
+    expect(result.mode).toBe("update")
+    expect(result.base.doctypes).toEqual({ notes: { dir: "notes" } })
   })
 
-  it("applies feature-project template with subcontexts and adr", async () => {
-    vi.mocked(p.select).mockResolvedValueOnce("feature-project")
+  it("returns overwrite with empty base when user chooses overwrite", async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(p.select).mockResolvedValue("overwrite")
 
-    await runInit()
+    const result = await resolveConflict("/tmp/test")
+    expect(result).toEqual({ mode: "overwrite", base: {} })
+  })
 
-    const [, content] = vi.mocked(fs.writeFileSyncOrAbort).mock.calls[0]
-    const parsed = JSON.parse(content as string)
-    expect(parsed.subcontexts).toBeDefined()
-    expect(parsed.doctypes.adr).toBeDefined()
-    expect(parsed.doctypes.specs).toBeDefined()
-    expect(parsed.doctypes.tasks).toBeDefined()
+  it("exits on cancel selection", async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(p.select).mockResolvedValue("cancel")
+
+    const exit = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("exit")
+    })
+    await expect(resolveConflict("/tmp/test")).rejects.toThrow("exit")
+    expect(exit).toHaveBeenCalledWith(0)
+    exit.mockRestore()
+  })
+
+  it("exits on p.isCancel from select", async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(p.select).mockResolvedValue(Symbol("cancel"))
+    vi.mocked(p.isCancel).mockReturnValue(true)
+
+    const exit = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("exit")
+    })
+    await expect(resolveConflict("/tmp/test")).rejects.toThrow("exit")
+    exit.mockRestore()
+  })
+
+  it("warns and offers overwrite when JSON parse fails in update mode", async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(p.select).mockResolvedValue("update")
+    vi.mocked(readFileSyncOrAbort).mockReturnValue("not valid json{{{")
+    vi.mocked(p.confirm).mockResolvedValue(true)
+
+    const result = await resolveConflict("/tmp/test")
+    expect(p.log.warning).toHaveBeenCalled()
+    expect(result).toEqual({ mode: "overwrite", base: {} })
+  })
+
+  it("warns about parent config and proceeds on confirm", async () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+    vi.mocked(locateProjectFile).mockReturnValue("/parent/.mcm.json")
+    vi.mocked(p.confirm).mockResolvedValue(true)
+
+    const result = await resolveConflict("/tmp/test")
+    expect(p.log.warning).toHaveBeenCalledWith(
+      expect.stringContaining("/parent/.mcm.json"),
+    )
+    expect(result).toEqual({ mode: "fresh", base: {} })
+  })
+
+  it("exits when user declines to create local with parent present", async () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+    vi.mocked(locateProjectFile).mockReturnValue("/parent/.mcm.json")
+    vi.mocked(p.confirm).mockResolvedValue(false)
+
+    const exit = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("exit")
+    })
+    await expect(resolveConflict("/tmp/test")).rejects.toThrow("exit")
+    exit.mockRestore()
   })
 })
 
-describe("runInit — custom path", () => {
-  beforeEach(() => {
-    vi.mocked(p.select).mockResolvedValueOnce("custom")
-    vi.mocked(project.parseProject).mockReturnValue({
-      extend: false,
-      doctypes: {},
-      sync: [],
+// ---------------------------------------------------------------------------
+// promptDoctype
+// ---------------------------------------------------------------------------
+
+describe("promptDoctype", () => {
+  it("returns null when user declines to add", async () => {
+    vi.mocked(p.confirm).mockResolvedValue(false)
+    const result = await promptDoctype({})
+    expect(result).toBeNull()
+  })
+
+  it("prompts for regular doctype when no subcontext exists and user declines subcontext", async () => {
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)   // add doctype?
+      .mockResolvedValueOnce(false)  // subcontext?
+    vi.mocked(p.text)
+      .mockResolvedValueOnce("notes")  // name
+      .mockResolvedValueOnce("notes")  // dir
+    const result = await promptDoctype({})
+    expect(result).toEqual({
+      name: "notes",
+      entry: { dir: "notes" },
+      role: "regular",
     })
   })
 
-  it("builds config from prompts and writes file", async () => {
-    // subcontexts: no
-    vi.mocked(p.confirm).mockResolvedValueOnce(false)
-    // add a doctype: yes
-    vi.mocked(p.confirm).mockResolvedValueOnce(true)
-    // doctype name: notes
-    vi.mocked(p.text).mockResolvedValueOnce("notes")
-    // directory: notes (default)
-    vi.mocked(p.text).mockResolvedValueOnce("notes")
-    // sequence scheme: 000
-    vi.mocked(p.select).mockResolvedValueOnce("000")
-    // add another: no
-    vi.mocked(p.confirm).mockResolvedValueOnce(false)
+  it("prompts for subcontext doctype when none exists and user confirms", async () => {
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)  // add doctype?
+      .mockResolvedValueOnce(true)  // subcontext?
+    vi.mocked(p.text)
+      .mockResolvedValueOnce("projects")  // name
+      .mockResolvedValueOnce("projects")  // dir
 
-    await runInit()
-
-    const [, content] = vi.mocked(fs.writeFileSyncOrAbort).mock.calls[0]
-    const parsed = JSON.parse(content as string)
-    expect(parsed.doctypes.notes.dir).toBe("notes")
-    expect(p.outro).toHaveBeenCalledWith("Created .mcm.json")
+    const result = await promptDoctype({})
+    expect(result).toEqual({
+      name: "projects",
+      entry: { dir: "projects" },
+      role: "subcontext",
+    })
   })
 
-  it("adds subcontext config when user enables subcontexts", async () => {
-    // use subcontexts: yes
-    vi.mocked(p.confirm).mockResolvedValueOnce(true)
-    // subcontexts dir
-    vi.mocked(p.text).mockResolvedValueOnce("features")
-    // add a doctype: yes
-    vi.mocked(p.confirm).mockResolvedValueOnce(true)
-    // doctype name
-    vi.mocked(p.text).mockResolvedValueOnce("notes")
-    // managed by subcontexts: yes
-    vi.mocked(p.confirm).mockResolvedValueOnce(true)
-    // directory
-    vi.mocked(p.text).mockResolvedValueOnce("notes")
-    // scheme
-    vi.mocked(p.select).mockResolvedValueOnce("000")
-    // add another: no
-    vi.mocked(p.confirm).mockResolvedValueOnce(false)
+  it("prompts for managed doctype when subcontext exists and user confirms", async () => {
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)  // add doctype?
+      .mockResolvedValueOnce(true)  // managed?
+    vi.mocked(p.text)
+      .mockResolvedValueOnce("tasks")  // name
+      .mockResolvedValueOnce("tasks")  // dir
 
-    await runInit()
+    const result = await promptDoctype({ subcontextDoctype: "projects" })
+    expect(result).toEqual({
+      name: "tasks",
+      entry: { dir: "tasks" },
+      role: "managed",
+    })
+  })
 
-    const [, content] = vi.mocked(fs.writeFileSyncOrAbort).mock.calls[0]
-    const parsed = JSON.parse(content as string)
-    expect(parsed.subcontexts.dir).toBe("features")
-    expect(parsed.subcontexts.doctypes).toContain("notes")
+  it("uses dir default when user provides empty dir", async () => {
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)   // add doctype?
+      .mockResolvedValueOnce(false)  // subcontext?
+    vi.mocked(p.text)
+      .mockResolvedValueOnce("notes")  // name
+      .mockResolvedValueOnce("")       // dir (empty → default)
+
+    const result = await promptDoctype({})
+    expect(result!.entry.dir).toBe("notes")
+  })
+
+  it("exits on cancel during name prompt", async () => {
+    vi.mocked(p.confirm).mockResolvedValueOnce(true)
+    vi.mocked(p.text).mockResolvedValueOnce(Symbol("cancel") as never)
+    vi.mocked(p.isCancel).mockImplementation((value) => typeof value === "symbol")
+
+    const exit = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("exit")
+    })
+    await expect(promptDoctype({})).rejects.toThrow("exit")
+    exit.mockRestore()
+  })
+
+  it("exits on cancel during role prompt", async () => {
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(Symbol("cancel") as never)
+    vi.mocked(p.text).mockResolvedValueOnce("notes")
+    vi.mocked(p.isCancel).mockImplementation((value) => typeof value === "symbol")
+
+    const exit = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("exit")
+    })
+    await expect(promptDoctype({})).rejects.toThrow("exit")
+    exit.mockRestore()
+  })
+
+  it("exits on cancel during dir prompt", async () => {
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)   // add doctype?
+      .mockResolvedValueOnce(false)  // subcontext?
+    vi.mocked(p.text)
+      .mockResolvedValueOnce("notes")
+      .mockResolvedValueOnce(Symbol("cancel") as never)
+    vi.mocked(p.isCancel).mockImplementation((value) => typeof value === "symbol")
+
+    const exit = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("exit")
+    })
+    await expect(promptDoctype({})).rejects.toThrow("exit")
+    exit.mockRestore()
   })
 })
 
-describe("runInit — CWD conflict (existing .mcm.json)", () => {
-  const existingRaw = {
-    $schema: SCHEMA_URL,
-    doctypes: { existing: { dir: "existing" } },
-    sync: [{ upstream: "other/.mcm.json", local: ".mcm.json", mode: "receive_merge" }],
-  }
+// ---------------------------------------------------------------------------
+// Name validation (via ProjectSchema)
+// ---------------------------------------------------------------------------
+
+describe("name validation", () => {
+  it("validate callback rejects invalid chars via schema", async () => {
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+    vi.mocked(p.text)
+      .mockResolvedValueOnce("notes")
+      .mockResolvedValueOnce("notes")
+
+    await promptDoctype({})
+
+    const validate = vi.mocked(p.text).mock.calls[0][0].validate!
+    expect(validate("valid-name")).toBeUndefined()
+    expect(validate("with spaces")).toBeDefined()
+    expect(validate("with/slash")).toBeDefined()
+  })
+
+  it("validate callback rejects 'sub' via schema", async () => {
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+    vi.mocked(p.text)
+      .mockResolvedValueOnce("notes")
+      .mockResolvedValueOnce("notes")
+
+    await promptDoctype({})
+
+    const validate = vi.mocked(p.text).mock.calls[0][0].validate!
+    expect(validate("sub")).toBeDefined()
+    expect(validate("sub")).toContain("reserved")
+  })
+
+  it("validate callback rejects duplicate name", async () => {
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+    vi.mocked(p.text)
+      .mockResolvedValueOnce("tasks")
+      .mockResolvedValueOnce("tasks")
+
+    await promptDoctype({ doctypes: { notes: { dir: "notes" } } })
+
+    const validate = vi.mocked(p.text).mock.calls[0][0].validate!
+    expect(validate("notes")).toContain("already exists")
+  })
+
+  it("accepts a name that matches an existing doctype's directory", async () => {
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+    vi.mocked(p.text)
+      .mockResolvedValueOnce("bar")
+      .mockResolvedValueOnce("bar-files")
+
+    // "foo" has dir "bar" — adding doctype named "bar" should be allowed
+    await promptDoctype({ doctypes: { foo: { dir: "bar" } } })
+
+    const validate = vi.mocked(p.text).mock.calls[0][0].validate!
+    expect(validate("bar")).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Dir validation (duplicate directory)
+// ---------------------------------------------------------------------------
+
+describe("dir validation", () => {
+  it("validate callback rejects duplicate directory via schema", async () => {
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)   // add doctype?
+      .mockResolvedValueOnce(false)  // subcontext?
+    vi.mocked(p.text)
+      .mockResolvedValueOnce("tasks")   // name
+      .mockResolvedValueOnce("tasks")   // dir (accepted value, but we test validate)
+
+    await promptDoctype({ doctypes: { notes: { dir: "shared" } } })
+
+    // The dir validate is on the second p.text call
+    const dirValidate = vi.mocked(p.text).mock.calls[1][0].validate!
+    expect(dirValidate("shared")).toBeDefined()
+    expect(dirValidate("shared")).toContain("duplicate")
+  })
+
+  it("validate callback accepts unique directory", async () => {
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+    vi.mocked(p.text)
+      .mockResolvedValueOnce("tasks")
+      .mockResolvedValueOnce("tasks")
+
+    await promptDoctype({ doctypes: { notes: { dir: "notes" } } })
+
+    const dirValidate = vi.mocked(p.text).mock.calls[1][0].validate!
+    expect(dirValidate("tasks")).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Subcontext prompting logic
+// ---------------------------------------------------------------------------
+
+describe("subcontext prompting", () => {
+  it('asks "be subcontext?" when no subcontext exists', async () => {
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)   // add doctype?
+      .mockResolvedValueOnce(false)  // subcontext?
+    vi.mocked(p.text)
+      .mockResolvedValueOnce("notes")
+      .mockResolvedValueOnce("notes")
+
+    await promptDoctype({})
+
+    const confirmCalls = vi.mocked(p.confirm).mock.calls
+    expect(confirmCalls[1][0].message).toContain("subcontext")
+  })
+
+  it('asks "be managed?" when subcontext exists', async () => {
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)   // add doctype?
+      .mockResolvedValueOnce(false)  // managed?
+    vi.mocked(p.text)
+      .mockResolvedValueOnce("tasks")
+      .mockResolvedValueOnce("tasks")
+
+    await promptDoctype({ subcontextDoctype: "projects" })
+
+    const confirmCalls = vi.mocked(p.confirm).mock.calls
+    expect(confirmCalls[1][0].message).toContain("managed")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// initCommand integration
+// ---------------------------------------------------------------------------
+
+describe("initCommand", () => {
+  let exitSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
-    writeProjectFile(existingRaw)
-    vi.mocked(project.locateProjectFile).mockReturnValue(join(tempDir, ".mcm.json"))
-    vi.mocked(project.loadJSONFile).mockReturnValue(existingRaw)
-    vi.mocked(project.parseProject).mockReturnValue({
-      extend: false,
-      doctypes: { existing: { dir: "existing", sequenceScheme: "000", sequenceSeparator: "." } },
-      sync: [{ upstream: "other/.mcm.json", local: ".mcm.json", mode: "receive_merge" }],
+    exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("exit")
     })
   })
 
-  it("cancel exits without writing", async () => {
-    vi.mocked(p.select).mockResolvedValueOnce("cancel")
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
-      throw new Error("process.exit")
-    })
-
-    await expect(runInit()).rejects.toThrow("process.exit")
-    expect(fs.writeFileSyncOrAbort).not.toHaveBeenCalled()
+  afterEach(() => {
     exitSpy.mockRestore()
   })
 
-  it("overwrite proceeds fresh without merging", async () => {
-    // select overwrite for existing config conflict
-    vi.mocked(p.select).mockResolvedValueOnce("overwrite")
-    // then template choice
-    vi.mocked(p.select).mockResolvedValueOnce("template")
-    // then template ID
-    vi.mocked(p.select).mockResolvedValueOnce("notes")
-
-    await runInit()
-
-    const [, content] = vi.mocked(fs.writeFileSyncOrAbort).mock.calls[0]
-    const parsed = JSON.parse(content as string)
-    // Should NOT have the old "existing" doctype
-    expect(parsed.doctypes?.existing).toBeUndefined()
-    expect(parsed.doctypes?.notes).toBeDefined()
-  })
-
-  it("update merges new doctypes into existing config", async () => {
-    // select update
-    vi.mocked(p.select).mockResolvedValueOnce("update")
-    // no subcontexts; add a doctype: yes
-    vi.mocked(p.confirm).mockResolvedValueOnce(false)
-    vi.mocked(p.confirm).mockResolvedValueOnce(true)
-    // new doctype name
-    vi.mocked(p.text).mockResolvedValueOnce("decisions")
-    // dir
-    vi.mocked(p.text).mockResolvedValueOnce("decisions")
-    // scheme
-    vi.mocked(p.select).mockResolvedValueOnce("000")
-    // add another: no
+  it("writes minimal config with zero doctypes", async () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+    vi.mocked(locateProjectFile).mockReturnValue(null)
+    // decline to add any doctypes
     vi.mocked(p.confirm).mockResolvedValueOnce(false)
 
-    await runInit()
+    await initCommand.callback!({ _: {} } as never)
 
-    const [, content] = vi.mocked(fs.writeFileSyncOrAbort).mock.calls[0]
-    const parsed = JSON.parse(content as string)
-    expect(parsed.doctypes.existing).toBeDefined()
-    expect(parsed.doctypes.decisions).toBeDefined()
-    expect(p.outro).toHaveBeenCalledWith("Updated .mcm.json")
+    expect(writeFileSyncOrAbort).toHaveBeenCalledTimes(1)
+    const written = vi.mocked(writeFileSyncOrAbort).mock.calls[0][1] as string
+    const parsed = JSON.parse(written)
+    expect(parsed.$schema).toBe(SCHEMA_URL)
+    expect(parsed.doctypes).toBeUndefined()
   })
 
-  it("update preserves sync and all other fields", async () => {
-    // select update; no new doctypes
-    vi.mocked(p.select).mockResolvedValueOnce("update")
-    vi.mocked(p.confirm).mockResolvedValueOnce(false) // no subcontexts
-    vi.mocked(p.confirm).mockResolvedValueOnce(false) // no add doctype
+  it("writes config with a regular doctype", async () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+    vi.mocked(locateProjectFile).mockReturnValue(null)
+    // add one doctype then stop
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)   // add doctype?
+      .mockResolvedValueOnce(false)  // subcontext?
+      .mockResolvedValueOnce(false)  // add another?
+    vi.mocked(p.text)
+      .mockResolvedValueOnce("notes")  // name
+      .mockResolvedValueOnce("notes")  // dir
 
-    await runInit()
+    await initCommand.callback!({ _: {} } as never)
 
-    const [, content] = vi.mocked(fs.writeFileSyncOrAbort).mock.calls[0]
-    const parsed = JSON.parse(content as string)
-    expect(parsed.sync).toEqual(existingRaw.sync)
-    expect(parsed.doctypes.existing).toBeDefined()
+    const written = vi.mocked(writeFileSyncOrAbort).mock.calls[0][1] as string
+    const parsed = JSON.parse(written)
+    expect(parsed.doctypes.notes).toEqual({ dir: "notes" })
+    expect(parsed.subcontextDoctype).toBeUndefined()
+    expect(parsed.managedDoctypes).toBeUndefined()
   })
 
-  it("update rejects adding a doctype that already exists", async () => {
-    // select update
-    vi.mocked(p.select).mockResolvedValueOnce("update")
-    vi.mocked(p.confirm).mockResolvedValueOnce(false) // no subcontexts
-    vi.mocked(p.confirm).mockResolvedValueOnce(true) // add a doctype
+  it("writes config with subcontext + managed doctype", async () => {
+    vi.mocked(existsSync).mockReturnValue(false)
+    vi.mocked(locateProjectFile).mockReturnValue(null)
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)   // add doctype?
+      .mockResolvedValueOnce(true)   // subcontext?
+      .mockResolvedValueOnce(true)   // add another doctype?
+      .mockResolvedValueOnce(true)   // managed?
+      .mockResolvedValueOnce(false)  // add another?
+    vi.mocked(p.text)
+      .mockResolvedValueOnce("projects")   // name
+      .mockResolvedValueOnce("projects")   // dir
+      .mockResolvedValueOnce("tasks")      // name
+      .mockResolvedValueOnce("tasks")      // dir
 
-    // Capture the validate function from p.text
-    let validateFn: ((v: string) => string | undefined) | undefined
-    vi.mocked(p.text).mockImplementationOnce(async (opts) => {
-      validateFn = opts.validate as (v: string) => string | undefined
-      return "decisions"
-    })
-    // dir
-    vi.mocked(p.text).mockResolvedValueOnce("decisions")
-    // scheme
-    vi.mocked(p.select).mockResolvedValueOnce("000")
-    // add another: no
+    await initCommand.callback!({ _: {} } as never)
+
+    const written = vi.mocked(writeFileSyncOrAbort).mock.calls[0][1] as string
+    const parsed = JSON.parse(written)
+    expect(parsed.subcontextDoctype).toBe("projects")
+    expect(parsed.managedDoctypes).toEqual(["tasks"])
+    expect(parsed.doctypes.projects).toEqual({ dir: "projects" })
+    expect(parsed.doctypes.tasks).toEqual({ dir: "tasks" })
+  })
+
+  it("patch mode preserves existing doctypes and sync", async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(p.select).mockResolvedValue("update")
+    vi.mocked(readFileSyncOrAbort).mockReturnValue(
+      JSON.stringify({
+        doctypes: { notes: { dir: "notes" } },
+        sync: [{ upstream: "/foo", local: "bar" }],
+      }),
+    )
+    // decline to add any new doctypes
     vi.mocked(p.confirm).mockResolvedValueOnce(false)
 
-    await runInit()
+    await initCommand.callback!({ _: {} } as never)
 
-    // "existing" is already in the config — validate should reject it
-    expect(validateFn?.("existing")).toMatch(/already exists/)
-    // an unrelated new name is fine
-    expect(validateFn?.("something-else")).toBeUndefined()
-  })
-})
-
-describe("runInit — parent config warning", () => {
-  it("confirm no exits without writing", async () => {
-    vi.mocked(project.locateProjectFile).mockReturnValue("/parent/.mcm.json")
-    vi.mocked(p.confirm).mockResolvedValueOnce(false)
-
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
-      throw new Error("process.exit")
-    })
-
-    await expect(runInit()).rejects.toThrow("process.exit")
-    expect(fs.writeFileSyncOrAbort).not.toHaveBeenCalled()
-    exitSpy.mockRestore()
+    const written = vi.mocked(writeFileSyncOrAbort).mock.calls[0][1] as string
+    const parsed = JSON.parse(written)
+    expect(parsed.doctypes.notes).toEqual({ dir: "notes" })
+    expect(parsed.sync).toHaveLength(1)
   })
 
-  it("confirm yes proceeds to init flow", async () => {
-    vi.mocked(project.locateProjectFile).mockReturnValue("/parent/.mcm.json")
-    vi.mocked(p.confirm).mockResolvedValueOnce(true)
-    vi.mocked(project.parseProject).mockReturnValue({ extend: false, doctypes: {}, sync: [] })
-    // start choice: template
-    vi.mocked(p.select).mockResolvedValueOnce("template")
-    // template: notes
-    vi.mocked(p.select).mockResolvedValueOnce("notes")
+  it("patch mode preserves existing subcontextDoctype", async () => {
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(p.select).mockResolvedValue("update")
+    vi.mocked(readFileSyncOrAbort).mockReturnValue(
+      JSON.stringify({
+        subcontextDoctype: "projects",
+        doctypes: { projects: { dir: "projects" } },
+      }),
+    )
+    // add a managed doctype then stop
+    vi.mocked(p.confirm)
+      .mockResolvedValueOnce(true)   // add doctype?
+      .mockResolvedValueOnce(true)   // managed?
+      .mockResolvedValueOnce(false)  // add another?
+    vi.mocked(p.text)
+      .mockResolvedValueOnce("tasks")
+      .mockResolvedValueOnce("tasks")
 
-    await runInit()
+    await initCommand.callback!({ _: {} } as never)
 
-    expect(fs.writeFileSyncOrAbort).toHaveBeenCalled()
+    const written = vi.mocked(writeFileSyncOrAbort).mock.calls[0][1] as string
+    const parsed = JSON.parse(written)
+    expect(parsed.subcontextDoctype).toBe("projects")
+    expect(parsed.managedDoctypes).toEqual(["tasks"])
+    expect(parsed.doctypes.projects).toEqual({ dir: "projects" })
+    expect(parsed.doctypes.tasks).toEqual({ dir: "tasks" })
   })
 })

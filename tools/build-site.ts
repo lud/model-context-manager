@@ -26,7 +26,7 @@ const PAGE_ORDER: string[] = []
 
 // --- Helpers ---
 
-function extractCommentDoc (project: Project, filePath: string): string | null {
+function extractCommentDoc(project: Project, filePath: string): string | null {
   const sourceFile = project.addSourceFileAtPath(filePath)
   const fn = sourceFile.getFunction("commentDoc")
   if (!fn) return null
@@ -42,7 +42,7 @@ function extractCommentDoc (project: Project, filePath: string): string | null {
     .trim()
 }
 
-function parseFrontmatter (content: string): {
+function parseFrontmatter(content: string): {
   title?: string
   [key: string]: unknown
 } {

@@ -1,5 +1,5 @@
 {
-  "$schema": "./resources/mcm-project.schema.json",
+  "$schema": "https://cdn.jsdelivr.net/gh/lud/model-context-manager@main/resources/mcm-project.schema.json",
   "doctypes": {},
   "sync": [
     {

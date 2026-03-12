@@ -116,29 +116,19 @@
         "description": "A single sync specification."
       }
     },
-    "subcontexts": {
-      "type": "object",
-      "properties": {
-        "dir": {
-          "type": "string",
-          "description": "Directory where subcontext directories are created. Relative paths are resolved from the config file location."
-        },
-        "doctypes": {
-          "minItems": 1,
-          "type": "array",
-          "items": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9._-]+$",
-            "description": "Doctype name. Only letters, digits, dots, hyphens, and underscores are allowed."
-          },
-          "description": "Doctypes managed by subcontexts."
-        }
-      },
-      "required": [
-        "dir",
-        "doctypes"
-      ],
-      "description": "Subcontexts configuration."
+    "subcontextDoctype": {
+      "description": "Name of the doctype that serves as the subcontext container.",
+      "type": "string"
+    },
+    "managedDoctypes": {
+      "default": [],
+      "description": "Doctypes whose files live inside subcontext directories.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$",
+        "description": "Doctype name. Only letters, digits, dots, hyphens, and underscores are allowed."
+      }
     }
   },
   "description": "MCM configuration file."

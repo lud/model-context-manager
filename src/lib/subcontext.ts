@@ -1,4 +1,6 @@
 import { readdirSync } from "node:fs"
+import { basename } from "node:path"
+import type { DoctypeFileEntry } from "./project.js"
 
 export function listSubcontexts(subcontextsAbsDir: string): string[] {
   try {
@@ -57,4 +59,64 @@ export function nextSubcontextDirName(
   }
   const next = String(maxNum + 1).padStart(3, "0")
   return `${next}.${slug}`
+}
+
+/**
+ * For each subdirectory in subcontextAbsDir, look for an eponymous .md file
+ * (dirName + ".md") inside it. Returns DoctypeFileEntry[] where each entry
+ * has files containing at most the brief filename.
+ */
+export function listBriefFiles(subcontextAbsDir: string): DoctypeFileEntry[] {
+  const subDirs = listSubcontexts(subcontextAbsDir)
+  const result: DoctypeFileEntry[] = []
+  for (const subDir of subDirs) {
+    const briefName = `${subDir}.md`
+    const dirPath = `${subcontextAbsDir}/${subDir}`
+    let files: string[] = []
+    try {
+      const entries = readdirSync(dirPath)
+      if (entries.includes(briefName)) {
+        files = [briefName]
+      }
+    } catch {
+      // missing dir — no brief
+    }
+    result.push({ dir: dirPath, files })
+  }
+  return result
+}
+
+/**
+ * Detect mismatches between subcontext directory slugs and their brief file slugs.
+ * A mismatch occurs when the brief file inside a subcontext directory has a different
+ * slug than the directory itself (e.g. directory renamed but brief not updated).
+ */
+export function detectBriefMismatches(
+  subcontextAbsDir: string,
+): Array<{ dir: string; expected: string; found: string }> {
+  const subDirs = listSubcontexts(subcontextAbsDir)
+  const mismatches: Array<{ dir: string; expected: string; found: string }> = []
+
+  for (const subDir of subDirs) {
+    const expectedBrief = `${subDir}.md`
+    const dirPath = `${subcontextAbsDir}/${subDir}`
+    try {
+      const entries = readdirSync(dirPath)
+      const mdFiles = entries.filter((f) => f.endsWith(".md"))
+      // Look for a .md file that isn't the expected brief
+      for (const md of mdFiles) {
+        if (md !== expectedBrief) {
+          // Only flag if it looks like a brief (same pattern: NNN.slug.md)
+          const dirSlug = subDir.replace(/^\d+\./, "")
+          const fileSlug = basename(md, ".md").replace(/^\d+\./, "")
+          if (fileSlug !== dirSlug) {
+            mismatches.push({ dir: subDir, expected: expectedBrief, found: md })
+          }
+        }
+      }
+    } catch {
+      // missing dir — skip
+    }
+  }
+  return mismatches
 }

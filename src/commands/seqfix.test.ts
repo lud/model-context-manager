@@ -7,19 +7,13 @@ import {
   it,
   vi,
 } from "vitest"
-import {
-  cpSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs"
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { tmpdir } from "node:os"
 import * as cli from "../lib/cli.js"
 import { mockProject } from "../lib/project.test-helpers.js"
+import { DoctypeRole } from "../lib/project.js"
 import { computeRenames, parseSeqPrefix, seqfixCommand } from "./seqfix.js"
+import { createTestWorkspace } from "../lib/test-workspace.js"
 
 const multiSubcontextFixture = join(
   import.meta.dirname,
@@ -28,15 +22,23 @@ const multiSubcontextFixture = join(
 
 vi.mock("../lib/cli.js")
 vi.mock("../lib/project.js")
+vi.mock("../lib/global-config.js", async (importOriginal) => {
+  const orig = await importOriginal<typeof import("../lib/global-config.js")>()
+  return {
+    ...orig,
+    getCurrentSubcontext: vi.fn(),
+    setCurrentSubcontext: vi.fn(),
+  }
+})
+
+import {
+  getCurrentSubcontext,
+  setCurrentSubcontext,
+} from "../lib/global-config.js"
 
 const fixtureDir = join(import.meta.dirname, "../../test/fixtures/seqfix")
 
-// Temp workspace for tests that actually rename files
-const workspace = mkdtempSync(join(tmpdir(), "mcm-test-seqfix-"))
-
-afterAll(() => {
-  rmSync(workspace, { recursive: true, force: true })
-})
+const workspace = createTestWorkspace("seqfix")
 
 beforeEach(() => {
   vi.mocked(cli.abortError).mockImplementation(() => {
@@ -166,7 +168,7 @@ describe("seqfixCommand (dry-run)", () => {
           dir: join(fixtureDir, "mixed"),
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })
@@ -188,7 +190,7 @@ describe("seqfixCommand (dry-run)", () => {
           dir: join(fixtureDir, "correct"),
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })
@@ -220,7 +222,7 @@ describe("seqfixCommand (dry-run)", () => {
           dir: "/tmp",
           sequenceScheme: "none",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })
@@ -243,7 +245,7 @@ describe("seqfixCommand (dry-run)", () => {
           dir: "/tmp",
           sequenceScheme: "datetime",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })
@@ -274,16 +276,27 @@ describe("seqfixCommand (inSubcontext, dry-run)", () => {
       projectDir: multiSubcontextFixture,
       currentSubcontext: "001.feature-a",
       doctypes: {
+        features: {
+          dir: join(multiSubcontextFixture, "features"),
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Subcontext,
+        },
         notes: {
           dir: join(multiSubcontextFixture, "features/001.feature-a/notes"),
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: true,
+          role: DoctypeRole.Managed,
         },
       },
       rawConfig: {
         extend: false,
         doctypes: {
+          features: {
+            dir: "features",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
           notes: {
             dir: "notes",
             sequenceScheme: "000",
@@ -291,7 +304,8 @@ describe("seqfixCommand (inSubcontext, dry-run)", () => {
           },
         },
         sync: [],
-        subcontexts: { dir: "features", doctypes: ["notes"] },
+        subcontextDoctype: "features",
+        managedDoctypes: ["notes"],
       },
     })
 
@@ -314,16 +328,27 @@ describe("seqfixCommand (inSubcontext, dry-run)", () => {
       projectDir: multiSubcontextFixture,
       currentSubcontext: "001.feature-a",
       doctypes: {
+        features: {
+          dir: join(multiSubcontextFixture, "nonexistent-features"),
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Subcontext,
+        },
         notes: {
           dir: join(multiSubcontextFixture, "features/001.feature-a/notes"),
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: true,
+          role: DoctypeRole.Managed,
         },
       },
       rawConfig: {
         extend: false,
         doctypes: {
+          features: {
+            dir: "nonexistent-features",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
           notes: {
             dir: "notes",
             sequenceScheme: "000",
@@ -331,8 +356,8 @@ describe("seqfixCommand (inSubcontext, dry-run)", () => {
           },
         },
         sync: [],
-        // point to empty subcontexts dir so there are no files at all
-        subcontexts: { dir: "nonexistent-features", doctypes: ["notes"] },
+        subcontextDoctype: "features",
+        managedDoctypes: ["notes"],
       },
     })
 
@@ -351,7 +376,7 @@ describe("seqfixCommand (inSubcontext, dry-run)", () => {
 
 describe("seqfixCommand (inSubcontext, --force)", () => {
   it("renames files globally across subcontexts", () => {
-    const base = mkdtempSync(join(workspace, "sub-force-run-"))
+    const base = workspace.dir("sub-force-run")
     const sub1Notes = join(base, "features/001.feature-a/notes")
     const sub2Notes = join(base, "features/002.feature-b/notes")
     mkdirSync(sub1Notes, { recursive: true })
@@ -365,16 +390,27 @@ describe("seqfixCommand (inSubcontext, --force)", () => {
       projectDir: base,
       currentSubcontext: "001.feature-a",
       doctypes: {
+        features: {
+          dir: join(base, "features"),
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Subcontext,
+        },
         notes: {
           dir: sub1Notes,
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: true,
+          role: DoctypeRole.Managed,
         },
       },
       rawConfig: {
         extend: false,
         doctypes: {
+          features: {
+            dir: "features",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
           notes: {
             dir: "notes",
             sequenceScheme: "000",
@@ -382,7 +418,8 @@ describe("seqfixCommand (inSubcontext, --force)", () => {
           },
         },
         sync: [],
-        subcontexts: { dir: "features", doctypes: ["notes"] },
+        subcontextDoctype: "features",
+        managedDoctypes: ["notes"],
       },
     })
 
@@ -411,8 +448,7 @@ describe("seqfixCommand (--force)", () => {
   let tmpDir: string
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(workspace, "run-"))
-    cpSync(join(fixtureDir, "mixed"), tmpDir, { recursive: true })
+    tmpDir = workspace.copyFixture(join(fixtureDir, "mixed"))
   })
 
   it("renames files and reports success", () => {
@@ -422,7 +458,7 @@ describe("seqfixCommand (--force)", () => {
           dir: tmpDir,
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })
@@ -442,5 +478,195 @@ describe("seqfixCommand (--force)", () => {
     expect(files).not.toContain("07.beta.md")
     expect(files).not.toContain("007.gamma.md")
     expect(files).not.toContain("010.delta.md")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// seqfixCommand — subcontext doctype, --force
+// ---------------------------------------------------------------------------
+
+describe("seqfixCommand (subcontext doctype, --force)", () => {
+  it("renumbers directories and renames brief files inside", () => {
+    const base = workspace.copyFixture(multiSubcontextFixture, "sub-seqfix")
+    const featuresDir = join(base, "features")
+
+    mockProject({
+      projectDir: base,
+      currentSubcontext: false,
+      doctypes: {
+        features: {
+          dir: featuresDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Subcontext,
+        },
+      },
+      rawConfig: {
+        extend: false,
+        doctypes: {
+          features: {
+            dir: "features",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
+        },
+        sync: [],
+        subcontextDoctype: "features",
+        managedDoctypes: [],
+      },
+    })
+
+    // Delete 002.feature-b to create a gap: 001, 003 remain
+    const { rmSync } = require("node:fs")
+    rmSync(join(featuresDir, "002.feature-b"), { recursive: true, force: true })
+
+    seqfixCommand.callback!({
+      _: { doctype: "features" },
+      flags: { force: true },
+    })
+
+    expect(cli.success).toHaveBeenCalledWith(expect.stringContaining("dir(s)"))
+
+    // 003.feature-c should have been renumbered to 002.feature-c
+    const dirs = readdirSync(featuresDir).sort()
+    expect(dirs).toContain("001.feature-a")
+    expect(dirs).toContain("002.feature-c")
+    expect(dirs).not.toContain("003.feature-c")
+  })
+
+  it("renames brief files to match new directory names", () => {
+    const base = workspace.copyFixture(multiSubcontextFixture, "sub-briefs")
+    const featuresDir = join(base, "features")
+
+    mockProject({
+      projectDir: base,
+      currentSubcontext: false,
+      doctypes: {
+        features: {
+          dir: featuresDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Subcontext,
+        },
+      },
+      rawConfig: {
+        extend: false,
+        doctypes: {
+          features: {
+            dir: "features",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
+        },
+        sync: [],
+        subcontextDoctype: "features",
+        managedDoctypes: [],
+      },
+    })
+
+    // Delete 001.feature-a so the remaining two (002, 003) get renumbered to 001, 002
+    const { rmSync } = require("node:fs")
+    rmSync(join(featuresDir, "001.feature-a"), { recursive: true, force: true })
+
+    seqfixCommand.callback!({
+      _: { doctype: "features" },
+      flags: { force: true },
+    })
+
+    // 002.feature-b → 001.feature-b: brief inside should also be renamed
+    expect(
+      existsSync(join(featuresDir, "001.feature-b", "001.feature-b.md")),
+    ).toBe(true)
+    expect(
+      existsSync(join(featuresDir, "001.feature-b", "002.feature-b.md")),
+    ).toBe(false)
+  })
+
+  it("updates current subcontext when the active one is renamed", () => {
+    const base = workspace.copyFixture(multiSubcontextFixture, "sub-current")
+    const featuresDir = join(base, "features")
+
+    vi.mocked(getCurrentSubcontext).mockReturnValue("003.feature-c")
+
+    mockProject({
+      projectDir: base,
+      currentSubcontext: "003.feature-c",
+      doctypes: {
+        features: {
+          dir: featuresDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Subcontext,
+        },
+      },
+      rawConfig: {
+        extend: false,
+        doctypes: {
+          features: {
+            dir: "features",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
+        },
+        sync: [],
+        subcontextDoctype: "features",
+        managedDoctypes: [],
+      },
+    })
+
+    // Remove 002.feature-b to create a gap so 003 → 002
+    const { rmSync } = require("node:fs")
+    rmSync(join(featuresDir, "002.feature-b"), { recursive: true, force: true })
+
+    seqfixCommand.callback!({
+      _: { doctype: "features" },
+      flags: { force: true },
+    })
+
+    expect(setCurrentSubcontext).toHaveBeenCalledWith(base, "002.feature-c")
+  })
+
+  it("shows dry-run output for subcontext doctype", () => {
+    const base = workspace.copyFixture(multiSubcontextFixture, "sub-dryrun")
+    const featuresDir = join(base, "features")
+
+    mockProject({
+      projectDir: base,
+      currentSubcontext: false,
+      doctypes: {
+        features: {
+          dir: featuresDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Subcontext,
+        },
+      },
+      rawConfig: {
+        extend: false,
+        doctypes: {
+          features: {
+            dir: "features",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
+        },
+        sync: [],
+        subcontextDoctype: "features",
+        managedDoctypes: [],
+      },
+    })
+
+    // Remove 002 to create a gap
+    const { rmSync } = require("node:fs")
+    rmSync(join(featuresDir, "002.feature-b"), { recursive: true, force: true })
+
+    seqfixCommand.callback!({
+      _: { doctype: "features" },
+      flags: { force: false },
+    })
+
+    expect(cli.info).toHaveBeenCalledWith("003.feature-c → 002.feature-c")
+    expect(cli.info).toHaveBeenCalledWith(expect.stringContaining("-f"))
+    expect(cli.success).not.toHaveBeenCalled()
   })
 })

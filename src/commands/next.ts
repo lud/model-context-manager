@@ -2,8 +2,10 @@ import { command } from "cleye"
 import { join } from "node:path"
 import * as cli from "../lib/cli.js"
 import {
+  DoctypeRole,
   getProject,
   listDoctypeFilesAcrossSubcontexts,
+  resolveDoctypeArg,
 } from "../lib/project.js"
 import { toDisplayPath } from "../lib/paths.js"
 import { nextFilename } from "../lib/sequence.js"
@@ -23,7 +25,7 @@ export const nextCommand = command(
   },
   (argv) => {
     const project = getProject({ sub: argv.flags?.sub })
-    const doctype = argv._.doctype
+    const doctype = resolveDoctypeArg(project, argv._.doctype)
     const titleWords: string[] = argv._.title ?? []
 
     const entry = project.doctypes[doctype]
@@ -31,7 +33,7 @@ export const nextCommand = command(
       cli.abortError(`Unknown doctype: ${doctype}`)
     }
 
-    if (entry.inSubcontext && !project.currentSubcontext) {
+    if (entry.role === DoctypeRole.Managed && !project.currentSubcontext) {
       cli.abortError(
         `Doctype "${doctype}" requires a subcontext. Use "mcm sub switch" to select one.`,
       )

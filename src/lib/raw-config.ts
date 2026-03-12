@@ -4,14 +4,10 @@ export type RawDoctypeEntry = {
   sequenceSeparator?: string
 }
 
-export type RawSubcontexts = {
-  dir: string
-  doctypes: string[]
-}
-
 export type RawConfig = {
   $schema?: string
   doctypes?: Record<string, RawDoctypeEntry>
-  subcontexts?: RawSubcontexts
+  subcontextDoctype?: string
+  managedDoctypes?: string[]
   sync?: unknown[]
 }

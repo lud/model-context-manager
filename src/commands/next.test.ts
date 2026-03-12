@@ -3,6 +3,7 @@ import { join } from "node:path"
 import * as cli from "../lib/cli.js"
 import { nextCommand } from "./next.js"
 import { mockProject } from "../lib/project.test-helpers.js"
+import { DoctypeRole } from "../lib/project.js"
 
 const multiSubcontextFixture = join(
   import.meta.dirname,
@@ -32,7 +33,7 @@ describe("nextCommand", () => {
           dir: join(fixtureDir, "counter-three-digit"),
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })
@@ -51,7 +52,7 @@ describe("nextCommand", () => {
           dir: join(fixtureDir, "empty"),
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })
@@ -70,7 +71,7 @@ describe("nextCommand", () => {
           dir: join(fixtureDir, "empty"),
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })
@@ -79,6 +80,28 @@ describe("nextCommand", () => {
 
     expect(cli.writeln).toHaveBeenCalledWith(
       expect.stringContaining("001.title-of-doc.md"),
+    )
+  })
+
+  it("aborts for managed doctype without active subcontext", () => {
+    mockProject({
+      doctypes: {
+        notes: {
+          dir: "/mock/notes",
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Managed,
+        },
+      },
+      currentSubcontext: false,
+    })
+
+    expect(() =>
+      nextCommand.callback!({ _: { doctype: "notes", title: ["test"] } }),
+    ).toThrow("abortError")
+
+    expect(cli.abortError).toHaveBeenCalledWith(
+      expect.stringContaining("requires a subcontext"),
     )
   })
 
@@ -99,7 +122,7 @@ describe("nextCommand", () => {
           dir: "/nonexistent/path",
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })
@@ -119,16 +142,27 @@ describe("nextCommand", () => {
       projectDir: multiSubcontextFixture,
       currentSubcontext: "002.feature-b",
       doctypes: {
+        features: {
+          dir: join(multiSubcontextFixture, "features"),
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Subcontext,
+        },
         notes: {
           dir: join(multiSubcontextFixture, "features/002.feature-b/notes"),
           sequenceScheme: "000",
           sequenceSeparator: ".",
-          inSubcontext: true,
+          role: DoctypeRole.Managed,
         },
       },
       rawConfig: {
         extend: false,
         doctypes: {
+          features: {
+            dir: "features",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
           notes: {
             dir: "notes",
             sequenceScheme: "000",
@@ -136,7 +170,8 @@ describe("nextCommand", () => {
           },
         },
         sync: [],
-        subcontexts: { dir: "features", doctypes: ["notes"] },
+        subcontextDoctype: "features",
+        managedDoctypes: ["notes"],
       },
     })
 
@@ -154,7 +189,7 @@ describe("nextCommand", () => {
           dir: join(fixtureDir, "counter-custom-sep"),
           sequenceScheme: "000",
           sequenceSeparator: " - ",
-          inSubcontext: false,
+          role: DoctypeRole.Regular,
         },
       },
     })

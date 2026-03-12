@@ -2,7 +2,12 @@ import { command } from "cleye"
 import { readdirSyncOrAbort, readFileSyncOrAbort } from "../lib/fs.js"
 import { join } from "node:path"
 import * as cli from "../lib/cli.js"
-import { getProject, listDoctypeFilesAcrossSubcontexts } from "../lib/project.js"
+import {
+  getProject,
+  listDoctypeFilesAcrossSubcontexts,
+  resolveDoctypeArg,
+} from "../lib/project.js"
+import { DoctypeRole } from "../lib/project.js"
 import type { ResolvedProject } from "../lib/project.js"
 import { toDisplayPath } from "../lib/paths.js"
 import { parseFrontmatter } from "../lib/frontmatter.js"
@@ -27,7 +32,8 @@ const EMPTY_FILTERS: ListFilters = {
 
 function parseProp(s: string): { key: string; value: string } {
   const idx = s.indexOf(":")
-  if (idx === -1) cli.abortError(`Invalid --prop format (expected key:value): ${s}`)
+  if (idx === -1)
+    cli.abortError(`Invalid --prop format (expected key:value): ${s}`)
   return { key: s.slice(0, idx), value: s.slice(idx + 1) }
 }
 
@@ -73,17 +79,35 @@ function filtersActive(f: ListFilters): boolean {
   return f.open || f.closed || f.tags.length > 0 || f.props.length > 0
 }
 
+function useGlobalScan(
+  project: ResolvedProject,
+  doctype: string,
+  allSubcontexts: boolean,
+): boolean {
+  const entry = project.doctypes[doctype]
+  if (allSubcontexts) return true
+  switch (entry.role) {
+    case DoctypeRole.Subcontext:
+      return true
+    case DoctypeRole.Managed:
+      return !project.currentSubcontext
+    case DoctypeRole.Regular:
+      return false
+  }
+}
+
 function* yieldDoctypeFilePaths(
   project: ResolvedProject,
   doctype: string,
   allSubcontexts: boolean,
 ): Generator<string> {
   const entry = project.doctypes[doctype]
-  // Use global scan when: explicitly requested OR no active subcontext
-  const global = allSubcontexts || (entry.inSubcontext && !project.currentSubcontext)
 
-  if (global) {
-    for (const { dir, files } of listDoctypeFilesAcrossSubcontexts(project, doctype)) {
+  if (useGlobalScan(project, doctype, allSubcontexts)) {
+    for (const { dir, files } of listDoctypeFilesAcrossSubcontexts(
+      project,
+      doctype,
+    )) {
       for (const file of files.slice().sort()) {
         yield join(dir, file)
       }
@@ -144,7 +168,10 @@ export const listCommand = command(
   },
   (argv) => {
     const project = getProject({ sub: argv.flags?.sub })
-    const doctype = argv._.doctype
+    const doctype =
+      argv._.doctype !== undefined
+        ? resolveDoctypeArg(project, argv._.doctype)
+        : undefined
 
     const hasFilterFlags =
       argv.flags?.tag?.length ||
@@ -175,7 +202,12 @@ export const listCommand = command(
     if (doctype === undefined) {
       listAllDoctypes(project.doctypes)
     } else {
-      listDoctypeFiles(project, doctype, filters, argv.flags?.allSubcontexts ?? false)
+      listDoctypeFiles(
+        project,
+        doctype,
+        filters,
+        argv.flags?.allSubcontexts ?? false,
+      )
     }
   },
 )
@@ -202,7 +234,11 @@ export function listDoctypeFiles(
 
   const active = filtersActive(filters)
 
-  for (const fullPath of yieldDoctypeFilePaths(project, doctype, allSubcontexts)) {
+  for (const fullPath of yieldDoctypeFilePaths(
+    project,
+    doctype,
+    allSubcontexts,
+  )) {
     if (active) {
       const content = readFileSyncOrAbort(fullPath, "utf-8")
       const { data } = parseFrontmatter(content)
