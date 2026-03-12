@@ -4,28 +4,28 @@ import { readFileSyncOrAbort, writeFileSyncOrAbort } from "../lib/fs.js"
 import { setFrontmatterProperty } from "../lib/frontmatter.js"
 import { toDisplayPath } from "../lib/paths.js"
 
-export const closeCommand = command(
+export const doneCommand = command(
   {
-    name: "close",
+    name: "done",
     parameters: ["<file>"],
-    help: { description: "Set status to 'closed' in a file's frontmatter" },
+    help: { description: "Set status to 'done' in a file's frontmatter" },
   },
   (argv) => {
     const filePath = argv._.file
     const content = readFileSyncOrAbort(filePath, "utf-8")
-    const updated = setFrontmatterProperty(content, "status", "closed")
+    const updated = setFrontmatterProperty(content, "status", "done")
     writeFileSyncOrAbort(filePath, updated)
     cli.writeln(toDisplayPath(filePath, process.cwd()))
   },
 )
 
 /**
- * Set the status of a file to 'closed' by updating its frontmatter.
+ * Set the status of a file to 'done' by updating its frontmatter.
  *
  * ## Examples
  *
  * ```sh
- * mcm close notes/001.my-note.md
+ * mcm done notes/001.my-note.md
  * ```
  */
 export function commentDoc() {}

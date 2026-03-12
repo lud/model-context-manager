@@ -15,8 +15,8 @@ import { parseFrontmatter } from "../lib/frontmatter.js"
 export type ListFilters = {
   tags: string[]
   anyTag: boolean
-  open: boolean
-  closed: boolean
+  active: boolean
+  done: boolean
   props: Array<{ key: string; value: string }>
   first: boolean
 }
@@ -24,8 +24,8 @@ export type ListFilters = {
 const EMPTY_FILTERS: ListFilters = {
   tags: [],
   anyTag: false,
-  open: false,
-  closed: false,
+  active: false,
+  done: false,
   props: [],
   first: false,
 }
@@ -56,8 +56,8 @@ export function matchesFilters(
   data: Record<string, unknown>,
   filters: ListFilters,
 ): boolean {
-  if (filters.open && data.status === "closed") return false
-  if (filters.closed && data.status !== "closed") return false
+  if (filters.active && data.status === "done") return false
+  if (filters.done && data.status !== "done") return false
 
   if (filters.tags.length > 0) {
     const tags = Array.isArray(data.tags) ? (data.tags as unknown[]) : []
@@ -76,7 +76,7 @@ export function matchesFilters(
 }
 
 function filtersActive(f: ListFilters): boolean {
-  return f.open || f.closed || f.tags.length > 0 || f.props.length > 0
+  return f.active || f.done || f.tags.length > 0 || f.props.length > 0
 }
 
 function useGlobalScan(
@@ -145,14 +145,14 @@ export const listCommand = command(
         description: "Use OR logic for --tag filters",
         default: false,
       },
-      open: {
+      active: {
         type: Boolean,
-        description: "Only open documents (status != 'closed')",
+        description: "Only active documents (status != 'done')",
         default: false,
       },
-      closed: {
+      done: {
         type: Boolean,
-        description: "Only closed documents (status == 'closed')",
+        description: "Only done documents (status == 'done')",
         default: false,
       },
       prop: {
@@ -176,8 +176,8 @@ export const listCommand = command(
     const hasFilterFlags =
       argv.flags?.tag?.length ||
       argv.flags?.anyTag ||
-      argv.flags?.open ||
-      argv.flags?.closed ||
+      argv.flags?.active ||
+      argv.flags?.done ||
       argv.flags?.prop?.length ||
       argv.flags?.first ||
       argv.flags?.allSubcontexts
@@ -186,15 +186,15 @@ export const listCommand = command(
       cli.abortError("Filter flags require a doctype argument")
     }
 
-    if (argv.flags?.open && argv.flags?.closed) {
-      cli.abortError("--open and --closed cannot be used together")
+    if (argv.flags?.active && argv.flags?.done) {
+      cli.abortError("--active and --done cannot be used together")
     }
 
     const filters: ListFilters = {
       tags: argv.flags?.tag ?? [],
       anyTag: argv.flags?.anyTag ?? false,
-      open: argv.flags?.open ?? false,
-      closed: argv.flags?.closed ?? false,
+      active: argv.flags?.active ?? false,
+      done: argv.flags?.done ?? false,
       props: (argv.flags?.prop ?? []).map(parseProp),
       first: argv.flags?.first ?? false,
     }

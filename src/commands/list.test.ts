@@ -70,8 +70,8 @@ function makeFilters(overrides: Partial<ListFilters> = {}): ListFilters {
   return {
     tags: [],
     anyTag: false,
-    open: false,
-    closed: false,
+    active: false,
+    done: false,
     props: [],
     first: false,
     ...overrides,
@@ -79,31 +79,31 @@ function makeFilters(overrides: Partial<ListFilters> = {}): ListFilters {
 }
 
 describe("matchesFilters", () => {
-  describe("--open", () => {
-    const filters = makeFilters({ open: true })
+  describe("--active", () => {
+    const filters = makeFilters({ active: true })
 
-    it("excludes status: closed", () => {
-      expect(matchesFilters({ status: "closed" }, filters)).toBe(false)
+    it("excludes status: done", () => {
+      expect(matchesFilters({ status: "done" }, filters)).toBe(false)
     })
 
-    it("includes status: open", () => {
-      expect(matchesFilters({ status: "open" }, filters)).toBe(true)
+    it("includes status: active", () => {
+      expect(matchesFilters({ status: "active" }, filters)).toBe(true)
     })
 
-    it("includes missing status (open by default)", () => {
+    it("includes missing status (active by default)", () => {
       expect(matchesFilters({}, filters)).toBe(true)
     })
   })
 
-  describe("--closed", () => {
-    const filters = makeFilters({ closed: true })
+  describe("--done", () => {
+    const filters = makeFilters({ done: true })
 
-    it("includes status: closed", () => {
-      expect(matchesFilters({ status: "closed" }, filters)).toBe(true)
+    it("includes status: done", () => {
+      expect(matchesFilters({ status: "done" }, filters)).toBe(true)
     })
 
-    it("excludes status: open", () => {
-      expect(matchesFilters({ status: "open" }, filters)).toBe(false)
+    it("excludes status: active", () => {
+      expect(matchesFilters({ status: "active" }, filters)).toBe(false)
     })
 
     it("excludes missing status", () => {
@@ -148,18 +148,18 @@ describe("matchesFilters", () => {
     expect(matchesFilters({ priority: "low" }, filters)).toBe(false)
   })
 
-  it("combined open + tag filters use intersection", () => {
-    const filters = makeFilters({ open: true, tags: ["api"] })
-    // closed with tag → excluded by open filter
-    expect(matchesFilters({ status: "closed", tags: ["api"] }, filters)).toBe(
+  it("combined active + tag filters use intersection", () => {
+    const filters = makeFilters({ active: true, tags: ["api"] })
+    // done with tag → excluded by active filter
+    expect(matchesFilters({ status: "done", tags: ["api"] }, filters)).toBe(
       false,
     )
-    // open without tag → excluded by tag filter
-    expect(matchesFilters({ status: "open", tags: ["other"] }, filters)).toBe(
+    // active without tag → excluded by tag filter
+    expect(matchesFilters({ status: "active", tags: ["other"] }, filters)).toBe(
       false,
     )
-    // open with tag → included
-    expect(matchesFilters({ status: "open", tags: ["api"] }, filters)).toBe(
+    // active with tag → included
+    expect(matchesFilters({ status: "active", tags: ["api"] }, filters)).toBe(
       true,
     )
   })
@@ -216,33 +216,33 @@ describe("listDoctypeFiles — notes-with-fm fixture", () => {
   it("no filters: lists all 4 files in sorted order", () => {
     listDoctypeFiles(makeNotesWithFmProject(), "notes")
     expect(capturedFileNames()).toEqual([
-      "001.open-tagged.md",
-      "002.closed-tagged.md",
-      "003.open-no-tags.md",
+      "001.active-tagged.md",
+      "002.done-tagged.md",
+      "003.active-no-tags.md",
       "004.no-frontmatter.md",
     ])
   })
 
-  it("--open: includes 001, 003, 004 (no frontmatter = open)", () => {
+  it("--active: includes 001, 003, 004 (no frontmatter = active)", () => {
     listDoctypeFiles(
       makeNotesWithFmProject(),
       "notes",
-      makeFilters({ open: true }),
+      makeFilters({ active: true }),
     )
     expect(capturedFileNames()).toEqual([
-      "001.open-tagged.md",
-      "003.open-no-tags.md",
+      "001.active-tagged.md",
+      "003.active-no-tags.md",
       "004.no-frontmatter.md",
     ])
   })
 
-  it("--closed: includes only 002", () => {
+  it("--done: includes only 002", () => {
     listDoctypeFiles(
       makeNotesWithFmProject(),
       "notes",
-      makeFilters({ closed: true }),
+      makeFilters({ done: true }),
     )
-    expect(capturedFileNames()).toEqual(["002.closed-tagged.md"])
+    expect(capturedFileNames()).toEqual(["002.done-tagged.md"])
   })
 
   it("--tag api (AND): includes 001 and 002", () => {
@@ -252,8 +252,8 @@ describe("listDoctypeFiles — notes-with-fm fixture", () => {
       makeFilters({ tags: ["api"] }),
     )
     expect(capturedFileNames()).toEqual([
-      "001.open-tagged.md",
-      "002.closed-tagged.md",
+      "001.active-tagged.md",
+      "002.done-tagged.md",
     ])
   })
 
@@ -263,7 +263,7 @@ describe("listDoctypeFiles — notes-with-fm fixture", () => {
       "notes",
       makeFilters({ tags: ["api", "auth"] }),
     )
-    expect(capturedFileNames()).toEqual(["001.open-tagged.md"])
+    expect(capturedFileNames()).toEqual(["001.active-tagged.md"])
   })
 
   it("--tag api --any-tag (OR): includes 001 and 002", () => {
@@ -273,8 +273,8 @@ describe("listDoctypeFiles — notes-with-fm fixture", () => {
       makeFilters({ tags: ["api"], anyTag: true }),
     )
     expect(capturedFileNames()).toEqual([
-      "001.open-tagged.md",
-      "002.closed-tagged.md",
+      "001.active-tagged.md",
+      "002.done-tagged.md",
     ])
   })
 
@@ -284,7 +284,7 @@ describe("listDoctypeFiles — notes-with-fm fixture", () => {
       "notes",
       makeFilters({ props: [{ key: "priority", value: "high" }] }),
     )
-    expect(capturedFileNames()).toEqual(["003.open-no-tags.md"])
+    expect(capturedFileNames()).toEqual(["003.active-no-tags.md"])
   })
 
   it("--prop author: (empty value): includes 003 (null matches empty query)", () => {
@@ -293,16 +293,16 @@ describe("listDoctypeFiles — notes-with-fm fixture", () => {
       "notes",
       makeFilters({ props: [{ key: "author", value: "" }] }),
     )
-    expect(capturedFileNames()).toEqual(["003.open-no-tags.md"])
+    expect(capturedFileNames()).toEqual(["003.active-no-tags.md"])
   })
 
-  it("--open --tag api: includes only 001", () => {
+  it("--active --tag api: includes only 001", () => {
     listDoctypeFiles(
       makeNotesWithFmProject(),
       "notes",
-      makeFilters({ open: true, tags: ["api"] }),
+      makeFilters({ active: true, tags: ["api"] }),
     )
-    expect(capturedFileNames()).toEqual(["001.open-tagged.md"])
+    expect(capturedFileNames()).toEqual(["001.active-tagged.md"])
   })
 
   it("--first: returns only the first file (001)", () => {
@@ -311,16 +311,16 @@ describe("listDoctypeFiles — notes-with-fm fixture", () => {
       "notes",
       makeFilters({ first: true }),
     )
-    expect(capturedFileNames()).toEqual(["001.open-tagged.md"])
+    expect(capturedFileNames()).toEqual(["001.active-tagged.md"])
   })
 
-  it("--first --closed: returns only the first closed file (002)", () => {
+  it("--first --done: returns only the first done file (002)", () => {
     listDoctypeFiles(
       makeNotesWithFmProject(),
       "notes",
-      makeFilters({ first: true, closed: true }),
+      makeFilters({ first: true, done: true }),
     )
-    expect(capturedFileNames()).toEqual(["002.closed-tagged.md"])
+    expect(capturedFileNames()).toEqual(["002.done-tagged.md"])
   })
 })
 
@@ -411,7 +411,7 @@ describe("listDoctypeFiles — subcontext doctype", () => {
 
     listCommand.callback!({
       _: { doctype: "features" },
-      flags: { open: true },
+      flags: { active: true },
     })
 
     const calls = vi.mocked(cli.writeln).mock.calls.map((c) => c[0])
@@ -426,7 +426,7 @@ describe("listDoctypeFiles — subcontext doctype", () => {
 // ---------------------------------------------------------------------------
 
 describe("listCommand error cases", () => {
-  it("--open --closed → abortError", () => {
+  it("--active --done → abortError", () => {
     mockProject({
       doctypes: {
         notes: {
@@ -440,11 +440,11 @@ describe("listCommand error cases", () => {
     expect(() =>
       listCommand.callback!({
         _: { doctype: "notes" },
-        flags: { open: true, closed: true },
+        flags: { active: true, done: true },
       }),
     ).toThrow("abortError")
     expect(cli.abortError).toHaveBeenCalledWith(
-      "--open and --closed cannot be used together",
+      "--active and --done cannot be used together",
     )
   })
 
@@ -453,7 +453,7 @@ describe("listCommand error cases", () => {
     expect(() =>
       listCommand.callback!({
         _: { doctype: undefined },
-        flags: { open: true },
+        flags: { active: true },
       }),
     ).toThrow("abortError")
     expect(cli.abortError).toHaveBeenCalledWith(

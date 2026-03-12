@@ -48,7 +48,7 @@
             "pattern": "^[^\\\\/\\x00]+$"
           },
           "defaultProperties": {
-            "description": "Properties to use as frontmatter when creating new files. If omitted, defaults to { created_on: '{{date}}', status: 'open' }. An explicit empty object {} disables default properties.",
+            "description": "Properties to use as frontmatter when creating new files. If omitted, defaults to { created_on: '{{date}}', status: 'active' }. An explicit empty object {} disables default properties.",
             "type": "object",
             "propertyNames": {
               "type": "string"

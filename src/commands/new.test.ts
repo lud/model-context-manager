@@ -98,7 +98,7 @@ describe("newCommand", () => {
 
     const content = readFileSync(join(tempDir, "001.my-first-note.md"), "utf-8")
     expect(content).toContain("created_on:")
-    expect(content).toContain("status: open")
+    expect(content).toContain("status: active")
     expect(content).toContain("# My First Note\n")
   })
 
@@ -121,7 +121,7 @@ describe("newCommand", () => {
     )
 
     const content = readFileSync(join(tempDir, "simple-doc.md"), "utf-8")
-    expect(content).toContain("status: open")
+    expect(content).toContain("status: active")
     expect(content).toContain("# Simple Doc\n")
   })
 
@@ -141,7 +141,7 @@ describe("newCommand", () => {
 
     const content = readFileSync(join(tempDir, "001.hello-world.md"), "utf-8")
     expect(content).toMatch(/created_on: \d{4}-\d{2}-\d{2}/)
-    expect(content).toContain("status: open")
+    expect(content).toContain("status: active")
     expect(content).toContain("# Hello World\n")
   })
 
@@ -455,7 +455,7 @@ describe("newCommand — subcontext doctype", () => {
     expect(existsSync(briefPath)).toBe(true)
     // Brief has frontmatter
     const content = readFileSync(briefPath, "utf-8")
-    expect(content).toContain("status: open")
+    expect(content).toContain("status: active")
     expect(content).toContain("# add auth\n")
     // Auto-switched
     expect(storedSubcontexts[tempDir]).toBe("001.add-auth")

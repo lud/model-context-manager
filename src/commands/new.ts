@@ -98,7 +98,7 @@ function resolveFileTarget(
   return { filePath, warnOnEmptyProperties: true }
 }
 
-const BUILT_IN_DEFAULT_PROPERTIES = { created_on: "{{date}}", status: "open" }
+const BUILT_IN_DEFAULT_PROPERTIES = { created_on: "{{date}}", status: "active" }
 
 export const newCommand = command(
   {

@@ -10,9 +10,9 @@ import {
 
 describe("parseFrontmatter", () => {
   it("parses valid frontmatter", () => {
-    const content = "---\ntitle: Hello\nstatus: open\n---\nBody text\n"
+    const content = "---\ntitle: Hello\nstatus: active\n---\nBody text\n"
     const { data, body } = parseFrontmatter(content)
-    expect(data).toEqual({ title: "Hello", status: "open" })
+    expect(data).toEqual({ title: "Hello", status: "active" })
     expect(body).toBe("Body text\n")
   })
 
@@ -56,10 +56,10 @@ describe("hasFrontmatter", () => {
 
 describe("formatFrontmatter", () => {
   it("formats a basic object", () => {
-    const result = formatFrontmatter({ title: "Hello", status: "open" })
+    const result = formatFrontmatter({ title: "Hello", status: "active" })
     expect(result).toContain("---\n")
     expect(result).toContain("title: Hello")
-    expect(result).toContain("status: open")
+    expect(result).toContain("status: active")
     expect(result).toMatch(/---\n$/)
   })
 
@@ -71,9 +71,9 @@ describe("formatFrontmatter", () => {
 
 describe("prependFrontmatter", () => {
   it("concatenates frontmatter and body", () => {
-    const result = prependFrontmatter({ status: "open" }, "# Title\n")
+    const result = prependFrontmatter({ status: "active" }, "# Title\n")
     expect(result).toMatch(/^---\n/)
-    expect(result).toContain("status: open")
+    expect(result).toContain("status: active")
     expect(result).toContain("---\n# Title\n")
   })
 })
@@ -117,24 +117,24 @@ describe("applyTemplates", () => {
 describe("setFrontmatterProperty", () => {
   it("adds a new key to existing frontmatter", () => {
     const content = "---\ntitle: Hello\n---\nBody\n"
-    const result = setFrontmatterProperty(content, "status", "closed")
+    const result = setFrontmatterProperty(content, "status", "done")
     const { data, body } = parseFrontmatter(result)
-    expect(data).toEqual({ title: "Hello", status: "closed" })
+    expect(data).toEqual({ title: "Hello", status: "done" })
     expect(body).toBe("Body\n")
   })
 
   it("updates an existing key", () => {
-    const content = "---\nstatus: open\n---\nBody\n"
-    const result = setFrontmatterProperty(content, "status", "closed")
+    const content = "---\nstatus: active\n---\nBody\n"
+    const result = setFrontmatterProperty(content, "status", "done")
     const { data } = parseFrontmatter(result)
-    expect(data.status).toBe("closed")
+    expect(data.status).toBe("done")
   })
 
   it("adds frontmatter when none exists", () => {
     const content = "# Heading\n"
-    const result = setFrontmatterProperty(content, "status", "closed")
+    const result = setFrontmatterProperty(content, "status", "done")
     const { data, body } = parseFrontmatter(result)
-    expect(data).toEqual({ status: "closed" })
+    expect(data).toEqual({ status: "done" })
     expect(body).toBe("# Heading\n")
   })
 })

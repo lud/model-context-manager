@@ -50,7 +50,7 @@ const DoctypeValueSchema = z
       .optional()
       .describe(
         "Properties to use as frontmatter when creating new files. " +
-          "If omitted, defaults to { created_on: '{{date}}', status: 'open' }. " +
+          "If omitted, defaults to { created_on: '{{date}}', status: 'active' }. " +
           "An explicit empty object {} disables default properties.",
       ),
   })
