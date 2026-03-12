@@ -18,7 +18,7 @@ import { slugify } from "../lib/slugify.js"
 import { listSubcontexts, nextSubcontextDirName } from "../lib/subcontext.js"
 import { setCurrentSubcontext } from "../lib/global-config.js"
 
-export function resolveEditor (): string | undefined {
+export function resolveEditor(): string | undefined {
   if (process.env.MCM_EDITOR) return process.env.MCM_EDITOR
   if (process.env.EDITOR) return process.env.EDITOR
   if (process.platform === "darwin") return "open"
@@ -32,7 +32,7 @@ type NewFileTarget = {
   subcontextDirName?: string
 }
 
-function resolveNewFileTarget (
+function resolveNewFileTarget(
   project: ResolvedProject,
   entry: ResolvedDoctypeEntry,
   doctype: string,
@@ -47,7 +47,7 @@ function resolveNewFileTarget (
   }
 }
 
-function resolveSubcontextTarget (
+function resolveSubcontextTarget(
   project: ResolvedProject,
   entry: ResolvedDoctypeEntry,
   slug: string,
@@ -76,7 +76,7 @@ function resolveSubcontextTarget (
   }
 }
 
-function resolveFileTarget (
+function resolveFileTarget(
   project: ResolvedProject,
   entry: ResolvedDoctypeEntry,
   doctype: string,
@@ -207,4 +207,4 @@ export const newCommand = command(
  * mcm new features "add auth"
  * ```
  */
-export function commentDoc () { }
+export function commentDoc() {}

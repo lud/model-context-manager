@@ -6,6 +6,7 @@ import { nextCommand } from "./commands/next.js"
 import { seqfixCommand } from "./commands/seqfix.js"
 import { subCommand } from "./commands/sub.js"
 import { initCommand } from "./commands/init.js"
+import { statusCommand } from "./commands/status.js"
 import { syncCommand } from "./commands/sync.js"
 import { whichCommand } from "./commands/which.js"
 import { abortError } from "./lib/cli.js"
@@ -21,6 +22,7 @@ const argv = cleyeCLI({
     doneCommand,
     subCommand,
     seqfixCommand,
+    statusCommand,
     whichCommand,
     syncCommand,
   ],

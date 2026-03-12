@@ -1,0 +1,10 @@
+{
+  "doctypes": {
+    "features": { "dir": "features" },
+    "notes": { "dir": "notes" },
+    "tasks": { "dir": "tasks" },
+    "devlogs": { "dir": "devlogs" }
+  },
+  "subcontextDoctype": "features",
+  "managedDoctypes": ["notes", "tasks"]
+}

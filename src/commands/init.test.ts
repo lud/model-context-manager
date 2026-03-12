@@ -71,7 +71,9 @@ describe("serializeConfig", () => {
 
   it("preserves sync when present", () => {
     const config: RawConfig = {
-      sync: [{ upstream: "/some/path", local: "dest", mode: "receive_merge" }] as unknown[],
+      sync: [
+        { upstream: "/some/path", local: "dest", mode: "receive_merge" },
+      ] as unknown[],
     }
     const result = serializeConfig(config)
     const parsed = JSON.parse(result)
@@ -203,11 +205,11 @@ describe("promptDoctype", () => {
 
   it("prompts for regular doctype when no subcontext exists and user declines subcontext", async () => {
     vi.mocked(p.confirm)
-      .mockResolvedValueOnce(true)   // add doctype?
-      .mockResolvedValueOnce(false)  // subcontext?
+      .mockResolvedValueOnce(true) // add doctype?
+      .mockResolvedValueOnce(false) // subcontext?
     vi.mocked(p.text)
-      .mockResolvedValueOnce("notes")  // name
-      .mockResolvedValueOnce("notes")  // dir
+      .mockResolvedValueOnce("notes") // name
+      .mockResolvedValueOnce("notes") // dir
     const result = await promptDoctype({})
     expect(result).toEqual({
       name: "notes",
@@ -218,11 +220,11 @@ describe("promptDoctype", () => {
 
   it("prompts for subcontext doctype when none exists and user confirms", async () => {
     vi.mocked(p.confirm)
-      .mockResolvedValueOnce(true)  // add doctype?
-      .mockResolvedValueOnce(true)  // subcontext?
+      .mockResolvedValueOnce(true) // add doctype?
+      .mockResolvedValueOnce(true) // subcontext?
     vi.mocked(p.text)
-      .mockResolvedValueOnce("projects")  // name
-      .mockResolvedValueOnce("projects")  // dir
+      .mockResolvedValueOnce("projects") // name
+      .mockResolvedValueOnce("projects") // dir
 
     const result = await promptDoctype({})
     expect(result).toEqual({
@@ -234,11 +236,11 @@ describe("promptDoctype", () => {
 
   it("prompts for managed doctype when subcontext exists and user confirms", async () => {
     vi.mocked(p.confirm)
-      .mockResolvedValueOnce(true)  // add doctype?
-      .mockResolvedValueOnce(true)  // managed?
+      .mockResolvedValueOnce(true) // add doctype?
+      .mockResolvedValueOnce(true) // managed?
     vi.mocked(p.text)
-      .mockResolvedValueOnce("tasks")  // name
-      .mockResolvedValueOnce("tasks")  // dir
+      .mockResolvedValueOnce("tasks") // name
+      .mockResolvedValueOnce("tasks") // dir
 
     const result = await promptDoctype({ subcontextDoctype: "projects" })
     expect(result).toEqual({
@@ -250,11 +252,11 @@ describe("promptDoctype", () => {
 
   it("uses dir default when user provides empty dir", async () => {
     vi.mocked(p.confirm)
-      .mockResolvedValueOnce(true)   // add doctype?
-      .mockResolvedValueOnce(false)  // subcontext?
+      .mockResolvedValueOnce(true) // add doctype?
+      .mockResolvedValueOnce(false) // subcontext?
     vi.mocked(p.text)
-      .mockResolvedValueOnce("notes")  // name
-      .mockResolvedValueOnce("")       // dir (empty → default)
+      .mockResolvedValueOnce("notes") // name
+      .mockResolvedValueOnce("") // dir (empty → default)
 
     const result = await promptDoctype({})
     expect(result!.entry.dir).toBe("notes")
@@ -263,7 +265,9 @@ describe("promptDoctype", () => {
   it("exits on cancel during name prompt", async () => {
     vi.mocked(p.confirm).mockResolvedValueOnce(true)
     vi.mocked(p.text).mockResolvedValueOnce(Symbol("cancel") as never)
-    vi.mocked(p.isCancel).mockImplementation((value) => typeof value === "symbol")
+    vi.mocked(p.isCancel).mockImplementation(
+      (value) => typeof value === "symbol",
+    )
 
     const exit = vi.spyOn(process, "exit").mockImplementation(() => {
       throw new Error("exit")
@@ -277,7 +281,9 @@ describe("promptDoctype", () => {
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(Symbol("cancel") as never)
     vi.mocked(p.text).mockResolvedValueOnce("notes")
-    vi.mocked(p.isCancel).mockImplementation((value) => typeof value === "symbol")
+    vi.mocked(p.isCancel).mockImplementation(
+      (value) => typeof value === "symbol",
+    )
 
     const exit = vi.spyOn(process, "exit").mockImplementation(() => {
       throw new Error("exit")
@@ -288,12 +294,14 @@ describe("promptDoctype", () => {
 
   it("exits on cancel during dir prompt", async () => {
     vi.mocked(p.confirm)
-      .mockResolvedValueOnce(true)   // add doctype?
-      .mockResolvedValueOnce(false)  // subcontext?
+      .mockResolvedValueOnce(true) // add doctype?
+      .mockResolvedValueOnce(false) // subcontext?
     vi.mocked(p.text)
       .mockResolvedValueOnce("notes")
       .mockResolvedValueOnce(Symbol("cancel") as never)
-    vi.mocked(p.isCancel).mockImplementation((value) => typeof value === "symbol")
+    vi.mocked(p.isCancel).mockImplementation(
+      (value) => typeof value === "symbol",
+    )
 
     const exit = vi.spyOn(process, "exit").mockImplementation(() => {
       throw new Error("exit")
@@ -376,11 +384,11 @@ describe("name validation", () => {
 describe("dir validation", () => {
   it("validate callback rejects duplicate directory via schema", async () => {
     vi.mocked(p.confirm)
-      .mockResolvedValueOnce(true)   // add doctype?
-      .mockResolvedValueOnce(false)  // subcontext?
+      .mockResolvedValueOnce(true) // add doctype?
+      .mockResolvedValueOnce(false) // subcontext?
     vi.mocked(p.text)
-      .mockResolvedValueOnce("tasks")   // name
-      .mockResolvedValueOnce("tasks")   // dir (accepted value, but we test validate)
+      .mockResolvedValueOnce("tasks") // name
+      .mockResolvedValueOnce("tasks") // dir (accepted value, but we test validate)
 
     await promptDoctype({ doctypes: { notes: { dir: "shared" } } })
 
@@ -412,8 +420,8 @@ describe("dir validation", () => {
 describe("subcontext prompting", () => {
   it('asks "be subcontext?" when no subcontext exists', async () => {
     vi.mocked(p.confirm)
-      .mockResolvedValueOnce(true)   // add doctype?
-      .mockResolvedValueOnce(false)  // subcontext?
+      .mockResolvedValueOnce(true) // add doctype?
+      .mockResolvedValueOnce(false) // subcontext?
     vi.mocked(p.text)
       .mockResolvedValueOnce("notes")
       .mockResolvedValueOnce("notes")
@@ -426,8 +434,8 @@ describe("subcontext prompting", () => {
 
   it('asks "be managed?" when subcontext exists', async () => {
     vi.mocked(p.confirm)
-      .mockResolvedValueOnce(true)   // add doctype?
-      .mockResolvedValueOnce(false)  // managed?
+      .mockResolvedValueOnce(true) // add doctype?
+      .mockResolvedValueOnce(false) // managed?
     vi.mocked(p.text)
       .mockResolvedValueOnce("tasks")
       .mockResolvedValueOnce("tasks")
@@ -476,12 +484,12 @@ describe("initCommand", () => {
     vi.mocked(locateProjectFile).mockReturnValue(null)
     // add one doctype then stop
     vi.mocked(p.confirm)
-      .mockResolvedValueOnce(true)   // add doctype?
-      .mockResolvedValueOnce(false)  // subcontext?
-      .mockResolvedValueOnce(false)  // add another?
+      .mockResolvedValueOnce(true) // add doctype?
+      .mockResolvedValueOnce(false) // subcontext?
+      .mockResolvedValueOnce(false) // add another?
     vi.mocked(p.text)
-      .mockResolvedValueOnce("notes")  // name
-      .mockResolvedValueOnce("notes")  // dir
+      .mockResolvedValueOnce("notes") // name
+      .mockResolvedValueOnce("notes") // dir
 
     await initCommand.callback!({ _: {} } as never)
 
@@ -496,16 +504,16 @@ describe("initCommand", () => {
     vi.mocked(existsSync).mockReturnValue(false)
     vi.mocked(locateProjectFile).mockReturnValue(null)
     vi.mocked(p.confirm)
-      .mockResolvedValueOnce(true)   // add doctype?
-      .mockResolvedValueOnce(true)   // subcontext?
-      .mockResolvedValueOnce(true)   // add another doctype?
-      .mockResolvedValueOnce(true)   // managed?
-      .mockResolvedValueOnce(false)  // add another?
+      .mockResolvedValueOnce(true) // add doctype?
+      .mockResolvedValueOnce(true) // subcontext?
+      .mockResolvedValueOnce(true) // add another doctype?
+      .mockResolvedValueOnce(true) // managed?
+      .mockResolvedValueOnce(false) // add another?
     vi.mocked(p.text)
-      .mockResolvedValueOnce("projects")   // name
-      .mockResolvedValueOnce("projects")   // dir
-      .mockResolvedValueOnce("tasks")      // name
-      .mockResolvedValueOnce("tasks")      // dir
+      .mockResolvedValueOnce("projects") // name
+      .mockResolvedValueOnce("projects") // dir
+      .mockResolvedValueOnce("tasks") // name
+      .mockResolvedValueOnce("tasks") // dir
 
     await initCommand.callback!({ _: {} } as never)
 
@@ -548,9 +556,9 @@ describe("initCommand", () => {
     )
     // add a managed doctype then stop
     vi.mocked(p.confirm)
-      .mockResolvedValueOnce(true)   // add doctype?
-      .mockResolvedValueOnce(true)   // managed?
-      .mockResolvedValueOnce(false)  // add another?
+      .mockResolvedValueOnce(true) // add doctype?
+      .mockResolvedValueOnce(true) // managed?
+      .mockResolvedValueOnce(false) // add another?
     vi.mocked(p.text)
       .mockResolvedValueOnce("tasks")
       .mockResolvedValueOnce("tasks")

@@ -1,0 +1,6 @@
+{
+  "doctypes": {
+    "notes": { "dir": "notes" },
+    "tasks": { "dir": "tasks" }
+  }
+}

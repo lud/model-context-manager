@@ -400,7 +400,7 @@ export function locateProjectFile(cwd: string): string | null {
   for (;;) {
     try {
       const candidate = join(dir, ".mcm.json")
-      if (existsSync(candidate)) return candidate
+      if (existsSync(candidate)) return resolve(candidate)
     } catch {
       return null
     }

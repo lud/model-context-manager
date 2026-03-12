@@ -1,3 +1,6 @@
 {
-  "json.format.keepLines": false
+  "json.format.keepLines": false,
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
 }

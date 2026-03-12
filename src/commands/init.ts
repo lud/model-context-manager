@@ -98,9 +98,11 @@ function validateCandidate(candidate: RawConfig): string | undefined {
   return result.error.issues[0].message
 }
 
-export async function promptDoctype(
-  config: RawConfig,
-): Promise<{ name: string; entry: RawDoctypeEntry; role: "regular" | "subcontext" | "managed" } | null> {
+export async function promptDoctype(config: RawConfig): Promise<{
+  name: string
+  entry: RawDoctypeEntry
+  role: "regular" | "subcontext" | "managed"
+} | null> {
   const addMore = await p.confirm({
     message: "Add a doctype?",
   })

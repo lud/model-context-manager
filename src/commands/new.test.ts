@@ -563,7 +563,7 @@ describe("newCommand — subcontext doctype", () => {
     })
 
     expect(cli.warning).toHaveBeenCalledWith(
-      "Cannot switch: not a subcontext doctype.",
+      "Cannot honor --switch option, not a subcontext doctype.",
     )
   })
 
