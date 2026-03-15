@@ -14,26 +14,28 @@ import { parseFrontmatter } from "../lib/frontmatter.js"
 
 export type ListFilters = {
   tags: string[]
-  anyTag: boolean
   active: boolean
   done: boolean
-  props: Array<{ key: string; value: string }>
+  status?: string
+  is: Array<{ key: string; value: string }>
   first: boolean
 }
 
+type ListPredicate = (data: Record<string, unknown>) => boolean
+
 const EMPTY_FILTERS: ListFilters = {
   tags: [],
-  anyTag: false,
   active: false,
   done: false,
-  props: [],
+  status: undefined,
+  is: [],
   first: false,
 }
 
-function parseProp(s: string): { key: string; value: string } {
+function parseIs(s: string): { key: string; value: string } {
   const idx = s.indexOf(":")
   if (idx === -1)
-    cli.abortError(`Invalid --prop format (expected key:value): ${s}`)
+    cli.abortError(`Invalid --is format (expected key:value): ${s}`)
   return { key: s.slice(0, idx), value: s.slice(idx + 1) }
 }
 
@@ -56,27 +58,43 @@ export function matchesFilters(
   data: Record<string, unknown>,
   filters: ListFilters,
 ): boolean {
-  if (filters.active && data.status === "done") return false
-  if (filters.done && data.status !== "done") return false
+  const predicates: ListPredicate[] = []
+
+  if (filters.active) {
+    predicates.push((item) => item.status !== "done")
+  }
+
+  if (filters.done) {
+    predicates.push((item) => item.status === "done")
+  }
+
+  if (filters.status !== undefined) {
+    const statusValue = filters.status
+    predicates.push((item) => propMatches(item, "status", statusValue))
+  }
 
   if (filters.tags.length > 0) {
-    const tags = Array.isArray(data.tags) ? (data.tags as unknown[]) : []
-    if (filters.anyTag) {
-      if (!filters.tags.some((t) => tags.includes(t))) return false
-    } else {
-      if (!filters.tags.every((t) => tags.includes(t))) return false
-    }
+    predicates.push((item) => {
+      const tags = Array.isArray(item.tags) ? (item.tags as unknown[]) : []
+      return filters.tags.every((t) => tags.includes(t))
+    })
   }
 
-  for (const { key, value } of filters.props) {
-    if (!propMatches(data, key, value)) return false
+  for (const { key, value } of filters.is) {
+    predicates.push((item) => propMatches(item, key, value))
   }
 
-  return true
+  return predicates.every((predicate) => predicate(data))
 }
 
 function filtersActive(f: ListFilters): boolean {
-  return f.active || f.done || f.tags.length > 0 || f.props.length > 0
+  return (
+    f.active ||
+    f.done ||
+    f.status !== undefined ||
+    f.tags.length > 0 ||
+    f.is.length > 0
+  )
 }
 
 function useGlobalScan(
@@ -138,12 +156,7 @@ export const listCommand = command(
       },
       tag: {
         type: [String],
-        description: "Filter by tag (repeatable; AND by default)",
-      },
-      anyTag: {
-        type: Boolean,
-        description: "Use OR logic for --tag filters",
-        default: false,
+        description: "Filter by tag (repeatable; all tags must match)",
       },
       active: {
         type: Boolean,
@@ -155,7 +168,11 @@ export const listCommand = command(
         description: "Only done documents (status == 'done')",
         default: false,
       },
-      prop: {
+      status: {
+        type: String,
+        description: "Filter by status",
+      },
+      is: {
         type: [String],
         description: "Filter by property (key:value, repeatable)",
       },
@@ -175,10 +192,10 @@ export const listCommand = command(
 
     const hasFilterFlags =
       argv.flags?.tag?.length ||
-      argv.flags?.anyTag ||
       argv.flags?.active ||
       argv.flags?.done ||
-      argv.flags?.prop?.length ||
+      argv.flags?.status !== undefined ||
+      argv.flags?.is?.length ||
       argv.flags?.first ||
       argv.flags?.allSubcontexts
 
@@ -192,10 +209,10 @@ export const listCommand = command(
 
     const filters: ListFilters = {
       tags: argv.flags?.tag ?? [],
-      anyTag: argv.flags?.anyTag ?? false,
       active: argv.flags?.active ?? false,
       done: argv.flags?.done ?? false,
-      props: (argv.flags?.prop ?? []).map(parseProp),
+      status: argv.flags?.status,
+      is: (argv.flags?.is ?? []).map(parseIs),
       first: argv.flags?.first ?? false,
     }
 

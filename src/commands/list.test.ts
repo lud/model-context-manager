@@ -69,10 +69,10 @@ describe("propMatches", () => {
 function makeFilters(overrides: Partial<ListFilters> = {}): ListFilters {
   return {
     tags: [],
-    anyTag: false,
     active: false,
     done: false,
-    props: [],
+    status: undefined,
+    is: [],
     first: false,
     ...overrides,
   }
@@ -130,22 +130,25 @@ describe("matchesFilters", () => {
     })
   })
 
-  describe("--tag with --any-tag (OR logic)", () => {
-    it("matches when any tag is present", () => {
-      const filters = makeFilters({ tags: ["api", "auth"], anyTag: true })
-      expect(matchesFilters({ tags: ["auth"] }, filters)).toBe(true)
-    })
-
-    it("fails when no tags match", () => {
-      const filters = makeFilters({ tags: ["api", "auth"], anyTag: true })
-      expect(matchesFilters({ tags: ["other"] }, filters)).toBe(false)
-    })
-  })
-
-  it("--prop delegates to propMatches", () => {
-    const filters = makeFilters({ props: [{ key: "priority", value: "high" }] })
+  it("--is delegates to propMatches", () => {
+    const filters = makeFilters({ is: [{ key: "priority", value: "high" }] })
     expect(matchesFilters({ priority: "high" }, filters)).toBe(true)
     expect(matchesFilters({ priority: "low" }, filters)).toBe(false)
+  })
+
+  it("--status matches exact status", () => {
+    const filters = makeFilters({ status: "specified" })
+    expect(matchesFilters({ status: "specified" }, filters)).toBe(true)
+    expect(matchesFilters({ status: "done" }, filters)).toBe(false)
+  })
+
+  it("--status and --is status:other are both applied (AND)", () => {
+    const filters = makeFilters({
+      status: "specified",
+      is: [{ key: "status", value: "done" }],
+    })
+    expect(matchesFilters({ status: "specified" }, filters)).toBe(false)
+    expect(matchesFilters({ status: "done" }, filters)).toBe(false)
   })
 
   it("combined active + tag filters use intersection", () => {
@@ -266,11 +269,11 @@ describe("listDoctypeFiles — notes-with-fm fixture", () => {
     expect(capturedFileNames()).toEqual(["001.active-tagged.md"])
   })
 
-  it("--tag api --any-tag (OR): includes 001 and 002", () => {
+  it("--tag api (single tag): includes 001 and 002", () => {
     listDoctypeFiles(
       makeNotesWithFmProject(),
       "notes",
-      makeFilters({ tags: ["api"], anyTag: true }),
+      makeFilters({ tags: ["api"] }),
     )
     expect(capturedFileNames()).toEqual([
       "001.active-tagged.md",
@@ -278,22 +281,31 @@ describe("listDoctypeFiles — notes-with-fm fixture", () => {
     ])
   })
 
-  it("--prop priority:high: includes only 003", () => {
+  it("--is priority:high: includes only 003", () => {
     listDoctypeFiles(
       makeNotesWithFmProject(),
       "notes",
-      makeFilters({ props: [{ key: "priority", value: "high" }] }),
+      makeFilters({ is: [{ key: "priority", value: "high" }] }),
     )
     expect(capturedFileNames()).toEqual(["003.active-no-tags.md"])
   })
 
-  it("--prop author: (empty value): includes 003 (null matches empty query)", () => {
+  it("--is author: (empty value): includes 003 (null matches empty query)", () => {
     listDoctypeFiles(
       makeNotesWithFmProject(),
       "notes",
-      makeFilters({ props: [{ key: "author", value: "" }] }),
+      makeFilters({ is: [{ key: "author", value: "" }] }),
     )
     expect(capturedFileNames()).toEqual(["003.active-no-tags.md"])
+  })
+
+  it("--status done: includes only 002", () => {
+    listDoctypeFiles(
+      makeNotesWithFmProject(),
+      "notes",
+      makeFilters({ status: "done" }),
+    )
+    expect(capturedFileNames()).toEqual(["002.done-tagged.md"])
   })
 
   it("--active --tag api: includes only 001", () => {
@@ -461,7 +473,7 @@ describe("listCommand error cases", () => {
     )
   })
 
-  it("--prop bad format (no colon) → abortError", () => {
+  it("--is bad format (no colon) → abortError", () => {
     mockProject({
       doctypes: {
         notes: {
@@ -475,12 +487,32 @@ describe("listCommand error cases", () => {
     expect(() =>
       listCommand.callback!({
         _: { doctype: "notes" },
-        flags: { prop: ["badformat"] },
+        flags: { is: ["badformat"] },
       }),
     ).toThrow("abortError")
     expect(cli.abortError).toHaveBeenCalledWith(
-      "Invalid --prop format (expected key:value): badformat",
+      "Invalid --is format (expected key:value): badformat",
     )
+  })
+
+  it("--is splits on the first colon only", () => {
+    mockProject({
+      doctypes: {
+        notes: {
+          dir: notesWithFmDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Regular,
+        },
+      },
+    })
+
+    listCommand.callback!({
+      _: { doctype: "notes" },
+      flags: { is: ["url:http://example.test/a:b"] },
+    })
+
+    expect(cli.writeln).not.toHaveBeenCalled()
   })
 
   it("--all-subcontexts without doctype arg → abortError", () => {

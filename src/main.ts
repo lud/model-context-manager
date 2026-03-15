@@ -1,5 +1,6 @@
 import { cli as cleyeCLI } from "cleye"
 import { doneCommand } from "./commands/done.js"
+import { editCommand } from "./commands/edit.js"
 import { listCommand } from "./commands/list.js"
 import { newCommand } from "./commands/new.js"
 import { nextCommand } from "./commands/next.js"
@@ -20,6 +21,7 @@ const argv = cleyeCLI({
     newCommand,
     nextCommand,
     doneCommand,
+    editCommand,
     subCommand,
     seqfixCommand,
     statusCommand,

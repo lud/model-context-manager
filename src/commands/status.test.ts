@@ -42,15 +42,36 @@ afterEach(() => {
 
 describe("formatCountLine", () => {
   it("formats a count line with padding", () => {
-    const counts: DoctypeCounts = { total: 5, active: 3, done: 2 }
+    const counts: DoctypeCounts = {
+      total: 5,
+      active: 3,
+      done: 2,
+      namedStatuses: {},
+    }
     const line = formatCountLine("notes", counts, 10)
     expect(line).toBe("  notes          5 (3 active, 2 done)")
   })
 
   it("formats zero counts", () => {
-    const counts: DoctypeCounts = { total: 0, active: 0, done: 0 }
+    const counts: DoctypeCounts = {
+      total: 0,
+      active: 0,
+      done: 0,
+      namedStatuses: {},
+    }
     const line = formatCountLine("tasks", counts, 5)
     expect(line).toBe("  tasks     0 (0 active, 0 done)")
+  })
+
+  it("prints named statuses between active and done", () => {
+    const counts: DoctypeCounts = {
+      total: 9,
+      active: 2,
+      done: 3,
+      namedStatuses: { review: 1, specified: 3 },
+    }
+    const line = formatCountLine("specs", counts, 5)
+    expect(line).toBe("  specs     9 (2 active, 1 review, 3 specified, 3 done)")
   })
 })
 
@@ -105,13 +126,23 @@ describe("countDoctype — no subcontext", () => {
   it("counts notes: 2 active, 1 done", () => {
     const project = setupNoSubcontext()
     const counts = countDoctype(project, "notes")
-    expect(counts).toEqual({ total: 3, active: 2, done: 1 })
+    expect(counts).toEqual({
+      total: 3,
+      active: 2,
+      done: 1,
+      namedStatuses: {},
+    })
   })
 
   it("counts tasks: 0 active, 2 done", () => {
     const project = setupNoSubcontext()
     const counts = countDoctype(project, "tasks")
-    expect(counts).toEqual({ total: 2, active: 0, done: 2 })
+    expect(counts).toEqual({
+      total: 2,
+      active: 0,
+      done: 2,
+      namedStatuses: {},
+    })
   })
 })
 
@@ -187,25 +218,45 @@ describe("countDoctype — with subcontext (global counts)", () => {
   it("counts features (subcontext briefs): 1 active, 1 done", () => {
     const project = setupWithSubcontext()
     const counts = countDoctype(project, "features")
-    expect(counts).toEqual({ total: 2, active: 1, done: 1 })
+    expect(counts).toEqual({
+      total: 2,
+      active: 1,
+      done: 1,
+      namedStatuses: {},
+    })
   })
 
   it("counts notes across all subcontexts: 1 active, 2 done", () => {
     const project = setupWithSubcontext()
     const counts = countDoctype(project, "notes")
-    expect(counts).toEqual({ total: 3, active: 1, done: 2 })
+    expect(counts).toEqual({
+      total: 3,
+      active: 1,
+      done: 2,
+      namedStatuses: {},
+    })
   })
 
   it("counts tasks across all subcontexts: 1 active, 0 done", () => {
     const project = setupWithSubcontext()
     const counts = countDoctype(project, "tasks")
-    expect(counts).toEqual({ total: 1, active: 1, done: 0 })
+    expect(counts).toEqual({
+      total: 1,
+      active: 1,
+      done: 0,
+      namedStatuses: {},
+    })
   })
 
   it("counts devlogs (regular): 2 active, 0 done", () => {
     const project = setupWithSubcontext()
     const counts = countDoctype(project, "devlogs")
-    expect(counts).toEqual({ total: 2, active: 2, done: 0 })
+    expect(counts).toEqual({
+      total: 2,
+      active: 2,
+      done: 0,
+      namedStatuses: {},
+    })
   })
 })
 
@@ -222,7 +273,12 @@ describe("countScopedManaged", () => {
       role: DoctypeRole.Managed,
     }
     const counts = countScopedManaged(entry)
-    expect(counts).toEqual({ total: 2, active: 1, done: 1 })
+    expect(counts).toEqual({
+      total: 2,
+      active: 1,
+      done: 1,
+      namedStatuses: {},
+    })
   })
 
   it("counts tasks in 001.auth subcontext", () => {
@@ -233,7 +289,12 @@ describe("countScopedManaged", () => {
       role: DoctypeRole.Managed,
     }
     const counts = countScopedManaged(entry)
-    expect(counts).toEqual({ total: 1, active: 1, done: 0 })
+    expect(counts).toEqual({
+      total: 1,
+      active: 1,
+      done: 0,
+      namedStatuses: {},
+    })
   })
 
   it("counts notes in 002.payments subcontext", () => {
@@ -244,7 +305,12 @@ describe("countScopedManaged", () => {
       role: DoctypeRole.Managed,
     }
     const counts = countScopedManaged(entry)
-    expect(counts).toEqual({ total: 1, active: 0, done: 1 })
+    expect(counts).toEqual({
+      total: 1,
+      active: 0,
+      done: 1,
+      namedStatuses: {},
+    })
   })
 })
 

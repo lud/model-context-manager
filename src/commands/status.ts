@@ -16,25 +16,44 @@ export type DoctypeCounts = {
   total: number
   active: number
   done: number
-}
-
-function isDone(data: Record<string, unknown>): boolean {
-  return data.status === "done"
+  namedStatuses: Record<string, number>
 }
 
 function countFiles(paths: string[]): DoctypeCounts {
   let active = 0
   let done = 0
+  const namedStatuses: Record<string, number> = {}
+
   for (const fullPath of paths) {
     const content = readFileSyncOrAbort(fullPath, "utf-8")
     const { data } = parseFrontmatter(content)
-    if (isDone(data)) {
+    const status = data.status
+
+    if (status === "done") {
       done++
-    } else {
-      active++
+      continue
     }
+
+    if (typeof status === "string" && status !== "active") {
+      namedStatuses[status] = (namedStatuses[status] ?? 0) + 1
+      continue
+    }
+
+    // Missing/non-string status and explicit "active" are merged as active.
+    active++
   }
-  return { total: active + done, active, done }
+
+  const namedTotal = Object.values(namedStatuses).reduce(
+    (sum, count) => sum + count,
+    0,
+  )
+
+  return {
+    total: active + namedTotal + done,
+    active,
+    done,
+    namedStatuses,
+  }
 }
 
 function collectRegularFiles(entry: ResolvedDoctypeEntry): string[] {
@@ -86,13 +105,24 @@ export function countScopedManaged(entry: ResolvedDoctypeEntry): DoctypeCounts {
   return countFiles(collectScopedManagedFiles(entry))
 }
 
+function formatNamedStatusParts(
+  namedStatuses: Record<string, number>,
+): string[] {
+  const names = Object.keys(namedStatuses).sort((a, b) => a.localeCompare(b))
+  return names.map((name) => `${namedStatuses[name]} ${name}`)
+}
+
 export function formatCountLine(
   name: string,
   counts: DoctypeCounts,
   maxNameLen: number,
 ): string {
   const padded = name.padEnd(maxNameLen)
-  const parts = [`${counts.active} active`, `${counts.done} done`]
+  const parts = [
+    `${counts.active} active`,
+    ...formatNamedStatusParts(counts.namedStatuses),
+    `${counts.done} done`,
+  ]
   return `  ${padded}  ${String(counts.total).padStart(4)} (${parts.join(", ")})`
 }
 
