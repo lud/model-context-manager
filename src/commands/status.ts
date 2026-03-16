@@ -16,12 +16,16 @@ export type DoctypeCounts = {
   total: number
   active: number
   done: number
+  none: number
+  other: number
   namedStatuses: Record<string, number>
 }
 
 function countFiles(paths: string[]): DoctypeCounts {
-  let active = 0
   let done = 0
+  let explicitActive = 0
+  let none = 0
+  let other = 0
   const namedStatuses: Record<string, number> = {}
 
   for (const fullPath of paths) {
@@ -34,24 +38,38 @@ function countFiles(paths: string[]): DoctypeCounts {
       continue
     }
 
-    if (typeof status === "string" && status !== "active") {
+    if (status === "active") {
+      // Keep explicit "active" within the parent active bucket, not as a named child status.
+      explicitActive++
+      continue
+    }
+
+    if (status === "" || status === null || status === undefined) {
+      none++
+      continue
+    }
+
+    if (typeof status === "string") {
       namedStatuses[status] = (namedStatuses[status] ?? 0) + 1
       continue
     }
 
-    // Missing/non-string status and explicit "active" are merged as active.
-    active++
+    other++
   }
 
-  const namedTotal = Object.values(namedStatuses).reduce(
+  const namedActiveTotal = Object.values(namedStatuses).reduce(
     (sum, count) => sum + count,
     0,
   )
 
+  const active = explicitActive + none + namedActiveTotal + other
+
   return {
-    total: active + namedTotal + done,
+    total: active + done,
     active,
     done,
+    none,
+    other,
     namedStatuses,
   }
 }
@@ -105,25 +123,55 @@ export function countScopedManaged(entry: ResolvedDoctypeEntry): DoctypeCounts {
   return countFiles(collectScopedManagedFiles(entry))
 }
 
-function formatNamedStatusParts(
-  namedStatuses: Record<string, number>,
-): string[] {
-  const names = Object.keys(namedStatuses).sort((a, b) => a.localeCompare(b))
-  return names.map((name) => `${namedStatuses[name]} ${name}`)
+function formatActiveBreakdown(counts: DoctypeCounts): string {
+  const parts: string[] = []
+
+  if (counts.none > 0) {
+    parts.push(`(none) ${counts.none}`)
+  }
+
+  const named = Object.keys(counts.namedStatuses)
+    .filter((name) => name !== "done")
+    .sort((a, b) => a.localeCompare(b))
+
+  for (const name of named) {
+    parts.push(`${name} ${counts.namedStatuses[name]}`)
+  }
+
+  if (counts.other > 0) {
+    parts.push(`(other) ${counts.other}`)
+  }
+
+  return parts.join(", ")
 }
 
-export function formatCountLine(
+export function formatCountLines(
   name: string,
   counts: DoctypeCounts,
   maxNameLen: number,
-): string {
+): string[] {
   const padded = name.padEnd(maxNameLen)
-  const parts = [
-    `${counts.active} active`,
-    ...formatNamedStatusParts(counts.namedStatuses),
-    `${counts.done} done`,
+  const lines = [
+    `  ${padded}  active ${String(counts.active).padStart(4)}`,
+    `  ${padded}  done   ${String(counts.done).padStart(4)}`,
   ]
-  return `  ${padded}  ${String(counts.total).padStart(4)} (${parts.join(", ")})`
+
+  const activeBreakdown = formatActiveBreakdown(counts)
+  if (activeBreakdown !== "") {
+    lines[0] += ` - ${activeBreakdown}`
+  }
+
+  return lines
+}
+
+function printDoctypeCounts(
+  name: string,
+  counts: DoctypeCounts,
+  maxNameLen: number,
+): void {
+  for (const line of formatCountLines(name, counts, maxNameLen)) {
+    cli.writeln(line)
+  }
 }
 
 export function printStatus(project: ResolvedProject): void {
@@ -140,14 +188,24 @@ export function printStatus(project: ResolvedProject): void {
   // Global counts for all doctypes
   for (const name of doctypeNames) {
     const counts = countDoctype(project, name)
-    cli.writeln(formatCountLine(name, counts, maxNameLen))
+    printDoctypeCounts(name, counts, maxNameLen)
   }
 
-  // Subcontext section
-  if (!project.currentSubcontext) return
+  cli.writeln("")
 
   const subDoctypeKey = project.rawConfig.subcontextDoctype
-  if (!subDoctypeKey) return
+  if (!subDoctypeKey) {
+    cli.writeln("Subcontext doctype: none")
+    cli.writeln("Current subcontext: none")
+    return
+  }
+
+  cli.writeln(`Subcontext doctype: ${subDoctypeKey}`)
+
+  if (!project.currentSubcontext) {
+    cli.writeln("Current subcontext: none")
+    return
+  }
 
   const subEntry = project.doctypes[subDoctypeKey]
   const briefPath = join(
@@ -156,7 +214,6 @@ export function printStatus(project: ResolvedProject): void {
     `${project.currentSubcontext}.md`,
   )
 
-  cli.writeln("")
   cli.writeln(`Current subcontext: ${toDisplayPath(briefPath, process.cwd())}`)
 
   const managedNames = project.rawConfig.managedDoctypes
@@ -167,7 +224,7 @@ export function printStatus(project: ResolvedProject): void {
   for (const name of managedNames) {
     const entry = project.doctypes[name]
     const counts = countScopedManaged(entry)
-    cli.writeln(formatCountLine(name, counts, maxManagedLen))
+    printDoctypeCounts(name, counts, maxManagedLen)
   }
 }
 

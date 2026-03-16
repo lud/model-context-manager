@@ -6,7 +6,7 @@ import { DoctypeRole } from "../lib/project.js"
 import {
   countDoctype,
   countScopedManaged,
-  formatCountLine,
+  formatCountLines,
   printStatus,
   statusCommand,
   type DoctypeCounts,
@@ -37,19 +37,23 @@ afterEach(() => {
 })
 
 // ---------------------------------------------------------------------------
-// formatCountLine — pure unit tests
+// formatCountLines — pure unit tests
 // ---------------------------------------------------------------------------
 
-describe("formatCountLine", () => {
-  it("formats a count line with padding", () => {
+describe("formatCountLines", () => {
+  it("formats two lines with padding", () => {
     const counts: DoctypeCounts = {
       total: 5,
       active: 3,
       done: 2,
+      none: 0,
+      other: 0,
       namedStatuses: {},
     }
-    const line = formatCountLine("notes", counts, 10)
-    expect(line).toBe("  notes          5 (3 active, 2 done)")
+    const lines = formatCountLines("notes", counts, 10)
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toMatch(/^\s+notes\s+active\s+3$/)
+    expect(lines[1]).toMatch(/^\s+notes\s+done\s+2$/)
   })
 
   it("formats zero counts", () => {
@@ -57,21 +61,30 @@ describe("formatCountLine", () => {
       total: 0,
       active: 0,
       done: 0,
+      none: 0,
+      other: 0,
       namedStatuses: {},
     }
-    const line = formatCountLine("tasks", counts, 5)
-    expect(line).toBe("  tasks     0 (0 active, 0 done)")
+    const lines = formatCountLines("tasks", counts, 5)
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toMatch(/^\s+tasks\s+active\s+0$/)
+    expect(lines[1]).toMatch(/^\s+tasks\s+done\s+0$/)
   })
 
-  it("prints named statuses between active and done", () => {
+  it("prints active breakdown as none, named, other", () => {
     const counts: DoctypeCounts = {
       total: 9,
-      active: 2,
+      active: 6,
       done: 3,
-      namedStatuses: { review: 1, specified: 3 },
+      none: 2,
+      other: 1,
+      namedStatuses: { specified: 3, done: 3 },
     }
-    const line = formatCountLine("specs", counts, 5)
-    expect(line).toBe("  specs     9 (2 active, 1 review, 3 specified, 3 done)")
+    const lines = formatCountLines("specs", counts, 5)
+    expect(lines).toEqual([
+      "  specs  active    6 - (none) 2, specified 3, (other) 1",
+      "  specs  done      3",
+    ])
   })
 })
 
@@ -130,6 +143,8 @@ describe("countDoctype — no subcontext", () => {
       total: 3,
       active: 2,
       done: 1,
+      none: 1,
+      other: 0,
       namedStatuses: {},
     })
   })
@@ -141,6 +156,8 @@ describe("countDoctype — no subcontext", () => {
       total: 2,
       active: 0,
       done: 2,
+      none: 0,
+      other: 0,
       namedStatuses: {},
     })
   })
@@ -222,6 +239,8 @@ describe("countDoctype — with subcontext (global counts)", () => {
       total: 2,
       active: 1,
       done: 1,
+      none: 0,
+      other: 0,
       namedStatuses: {},
     })
   })
@@ -233,6 +252,8 @@ describe("countDoctype — with subcontext (global counts)", () => {
       total: 3,
       active: 1,
       done: 2,
+      none: 0,
+      other: 0,
       namedStatuses: {},
     })
   })
@@ -244,6 +265,8 @@ describe("countDoctype — with subcontext (global counts)", () => {
       total: 1,
       active: 1,
       done: 0,
+      none: 0,
+      other: 0,
       namedStatuses: {},
     })
   })
@@ -255,6 +278,8 @@ describe("countDoctype — with subcontext (global counts)", () => {
       total: 2,
       active: 2,
       done: 0,
+      none: 1,
+      other: 0,
       namedStatuses: {},
     })
   })
@@ -277,6 +302,8 @@ describe("countScopedManaged", () => {
       total: 2,
       active: 1,
       done: 1,
+      none: 0,
+      other: 0,
       namedStatuses: {},
     })
   })
@@ -293,6 +320,8 @@ describe("countScopedManaged", () => {
       total: 1,
       active: 1,
       done: 0,
+      none: 0,
+      other: 0,
       namedStatuses: {},
     })
   })
@@ -309,6 +338,8 @@ describe("countScopedManaged", () => {
       total: 1,
       active: 0,
       done: 1,
+      none: 0,
+      other: 0,
       namedStatuses: {},
     })
   })
@@ -366,13 +397,18 @@ describe("printStatus — no subcontext project", () => {
     printStatus(project)
 
     const lines = capturedLines()
-    expect(lines).toHaveLength(3)
+    expect(lines).toHaveLength(8)
     expect(lines[0]).toMatch(/Current project:/)
-    expect(lines[1]).toMatch(/notes\s+3 \(2 active, 1 done\)/)
-    expect(lines[2]).toMatch(/tasks\s+2 \(0 active, 2 done\)/)
+    expect(lines[1]).toMatch(/notes\s+active\s+2\s+-\s+\(none\)\s+1/)
+    expect(lines[2]).toMatch(/notes\s+done\s+1/)
+    expect(lines[3]).toMatch(/tasks\s+active\s+0/)
+    expect(lines[4]).toMatch(/tasks\s+done\s+2/)
+    expect(lines[5]).toBe("")
+    expect(lines[6]).toBe("Subcontext doctype: none")
+    expect(lines[7]).toBe("Current subcontext: none")
   })
 
-  it("does not print subcontext section", () => {
+  it("prints subcontext metadata with no current subcontext", () => {
     const project = {
       currentSubcontext: false,
       projectDir: noSubcontextFixture,
@@ -404,7 +440,8 @@ describe("printStatus — no subcontext project", () => {
     printStatus(project)
 
     const lines = capturedLines()
-    expect(lines.some((l) => l.includes("Current subcontext"))).toBe(false)
+    expect(lines).toContain("Subcontext doctype: none")
+    expect(lines).toContain("Current subcontext: none")
   })
 })
 
@@ -482,19 +519,26 @@ describe("printStatus — with active subcontext", () => {
     // Project header
     expect(lines[0]).toMatch(/Current project:/)
 
-    // Global counts (4 doctypes)
-    expect(lines[1]).toMatch(/features\s+2 \(1 active, 1 done\)/)
-    expect(lines[2]).toMatch(/notes\s+3 \(1 active, 2 done\)/)
-    expect(lines[3]).toMatch(/tasks\s+1 \(1 active, 0 done\)/)
-    expect(lines[4]).toMatch(/devlogs\s+2 \(2 active, 0 done\)/)
+    // Global counts (4 doctypes, 2 lines each)
+    expect(lines[1]).toMatch(/features\s+active\s+1/)
+    expect(lines[2]).toMatch(/features\s+done\s+1/)
+    expect(lines[3]).toMatch(/notes\s+active\s+1/)
+    expect(lines[4]).toMatch(/notes\s+done\s+2/)
+    expect(lines[5]).toMatch(/tasks\s+active\s+1/)
+    expect(lines[6]).toMatch(/tasks\s+done\s+0/)
+    expect(lines[7]).toMatch(/devlogs\s+active\s+2\s+-\s+\(none\)\s+1/)
+    expect(lines[8]).toMatch(/devlogs\s+done\s+0/)
 
-    // Blank line + subcontext header
-    expect(lines[5]).toBe("")
-    expect(lines[6]).toMatch(/Current subcontext:.*001\.auth.*001\.auth\.md/)
+    // Subcontext metadata and header
+    expect(lines[9]).toBe("")
+    expect(lines[10]).toBe("Subcontext doctype: features")
+    expect(lines[11]).toMatch(/Current subcontext:.*001\.auth.*001\.auth\.md/)
 
-    // Scoped managed counts (only notes + tasks in 001.auth)
-    expect(lines[7]).toMatch(/notes\s+2 \(1 active, 1 done\)/)
-    expect(lines[8]).toMatch(/tasks\s+1 \(1 active, 0 done\)/)
+    // Scoped managed counts (only notes + tasks in 001.auth, 2 lines each)
+    expect(lines[12]).toMatch(/notes\s+active\s+1/)
+    expect(lines[13]).toMatch(/notes\s+done\s+1/)
+    expect(lines[14]).toMatch(/tasks\s+active\s+1/)
+    expect(lines[15]).toMatch(/tasks\s+done\s+0/)
   })
 })
 
@@ -547,8 +591,12 @@ describe("statusCommand", () => {
     statusCommand.callback!({ _: {} })
 
     const lines = capturedLines()
-    expect(lines).toHaveLength(2)
+    expect(lines).toHaveLength(6)
     expect(lines[0]).toMatch(/Current project:/)
-    expect(lines[1]).toMatch(/notes\s+3 \(2 active, 1 done\)/)
+    expect(lines[1]).toMatch(/notes\s+active\s+2\s+-\s+\(none\)\s+1/)
+    expect(lines[2]).toMatch(/notes\s+done\s+1/)
+    expect(lines[3]).toBe("")
+    expect(lines[4]).toBe("Subcontext doctype: none")
+    expect(lines[5]).toBe("Current subcontext: none")
   })
 })
