@@ -244,3 +244,28 @@ export const statusCommand = command(
     printStatus(project)
   },
 )
+
+/**
+ * Show project progress with a global doctype breakdown and subcontext details.
+ *
+ * Output format per doctype is two lines:
+ * - `active` count (anything with status != `done`) with an optional breakdown
+ * - `done` count (status == `done`)
+ *
+ * Active breakdown order:
+ * 1. `(none)` for `status: null`, `status: ""`, or missing `status`
+ * 2. named string statuses (except `done`, sorted alphabetically)
+ * 3. `(other)` for non-string status values
+ *
+ * The command always prints subcontext metadata between global and scoped sections:
+ * - `Subcontext doctype: <name|none>`
+ * - `Current subcontext: <path|none>`
+ *
+ * ## Examples
+ *
+ * ```sh
+ * mcm status
+ * mcm status --sub 001.auth
+ * ```
+ */
+export function commentDoc() {}
