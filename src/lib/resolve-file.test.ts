@@ -347,6 +347,80 @@ describe("resolveFromPath with subcontexts", () => {
   })
 })
 
+describe("resolveFromPath edge cases", () => {
+  it("aborts when absolute path does not exist", () => {
+    const project = makeProject({
+      projectDir: noSubcontextDir,
+      doctypes: {
+        notes: {
+          dir: join(noSubcontextDir, "notes"),
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Regular,
+        },
+      },
+    })
+
+    expect(() =>
+      resolveFromPath(project, "/nonexistent/path/file.md", "/tmp"),
+    ).toThrow("File not found: /nonexistent/path/file.md")
+  })
+
+  it("validates managed doctype file in a different subcontext than current", () => {
+    // Project is resolved with feature-a as current subcontext,
+    // but the file is in feature-b. The direct doctype dir match won't hit,
+    // so it must go through the managed doctype validation path.
+    const featuresDir = join(multiSubcontextDir, "features")
+    const project = makeProject({
+      projectDir: multiSubcontextDir,
+      projectFile: join(multiSubcontextDir, ".mcm.json"),
+      subcontextDoctype: "features",
+      managedDoctypes: ["notes"],
+      rawConfig: {
+        extend: false,
+        doctypes: {
+          features: {
+            dir: "features",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
+          notes: {
+            dir: "notes",
+            sequenceScheme: "000",
+            sequenceSeparator: ".",
+          },
+        },
+        sync: [],
+        subcontextDoctype: "features",
+        managedDoctypes: ["notes"],
+      },
+      doctypes: {
+        features: {
+          dir: featuresDir,
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Subcontext,
+        },
+        notes: {
+          // Current subcontext is feature-a
+          dir: join(featuresDir, "001.feature-a/notes"),
+          sequenceScheme: "000",
+          sequenceSeparator: ".",
+          role: DoctypeRole.Managed,
+        },
+      },
+    })
+
+    // But the file is in feature-b
+    const result = resolveFromPath(
+      project,
+      "features/002.feature-b/notes/001.login.md",
+      multiSubcontextDir,
+    )
+    expect(result).toBe(join(featuresDir, "002.feature-b/notes/001.login.md"))
+  })
+})
+
 describe("resolveFileArg", () => {
   const notesDir = join(noSubcontextDir, "notes")
   const project = makeProject({
