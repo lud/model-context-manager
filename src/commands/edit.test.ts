@@ -1,17 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import * as cli from "../lib/cli.js"
+import * as resolveFileModule from "../lib/resolve-file.js"
+import { mockProject } from "../lib/project.test-helpers.js"
 import { editCommand } from "./edit.js"
 
 vi.mock("../lib/cli.js")
+vi.mock("../lib/project.js")
+vi.mock("../lib/resolve-file.js")
 
 let tempDir: string
 
@@ -20,6 +18,7 @@ beforeEach(() => {
   vi.mocked(cli.abortError).mockImplementation(() => {
     throw new Error("abortError")
   })
+  mockProject({ projectDir: tempDir })
 })
 
 afterEach(() => {
@@ -27,13 +26,18 @@ afterEach(() => {
   vi.resetAllMocks()
 })
 
+function mockResolve(filePath: string) {
+  vi.mocked(resolveFileModule.resolveFileArg).mockReturnValue(filePath)
+}
+
 describe("editCommand", () => {
   it("sets a property via --set", () => {
     const filePath = join(tempDir, "note.md")
     writeFileSync(filePath, "---\nstatus: active\n---\n# Note\n")
+    mockResolve(filePath)
 
     editCommand.callback!({
-      _: { file: filePath },
+      _: { pathOrDoctype: filePath, id: undefined },
       flags: { set: ["status:specified"] },
     })
 
@@ -45,9 +49,10 @@ describe("editCommand", () => {
   it("splits --set on the first colon only", () => {
     const filePath = join(tempDir, "note.md")
     writeFileSync(filePath, "---\nstatus: active\n---\n# Note\n")
+    mockResolve(filePath)
 
     editCommand.callback!({
-      _: { file: filePath },
+      _: { pathOrDoctype: filePath, id: undefined },
       flags: { set: ["summary:http://example.test/a:b"] },
     })
 
@@ -58,9 +63,10 @@ describe("editCommand", () => {
   it("applies repeated --set in order so last one wins", () => {
     const filePath = join(tempDir, "note.md")
     writeFileSync(filePath, "---\nstatus: active\n---\n# Note\n")
+    mockResolve(filePath)
 
     editCommand.callback!({
-      _: { file: filePath },
+      _: { pathOrDoctype: filePath, id: undefined },
       flags: { set: ["status:foo", "status:baz"] },
     })
 
@@ -72,9 +78,10 @@ describe("editCommand", () => {
   it("applies --set-status after --set so --set-status wins", () => {
     const filePath = join(tempDir, "note.md")
     writeFileSync(filePath, "---\nstatus: active\n---\n# Note\n")
+    mockResolve(filePath)
 
     editCommand.callback!({
-      _: { file: filePath },
+      _: { pathOrDoctype: filePath, id: undefined },
       flags: {
         set: ["status:foo", "owner:alice", "status:baz"],
         setStatus: "bar",
@@ -89,9 +96,10 @@ describe("editCommand", () => {
   it("adds frontmatter when file has none", () => {
     const filePath = join(tempDir, "plain.md")
     writeFileSync(filePath, "# Plain\n")
+    mockResolve(filePath)
 
     editCommand.callback!({
-      _: { file: filePath },
+      _: { pathOrDoctype: filePath, id: undefined },
       flags: { setStatus: "done" },
     })
 
@@ -104,9 +112,10 @@ describe("editCommand", () => {
   it("prints the edited file path", () => {
     const filePath = join(tempDir, "note.md")
     writeFileSync(filePath, "---\nstatus: active\n---\n")
+    mockResolve(filePath)
 
     editCommand.callback!({
-      _: { file: filePath },
+      _: { pathOrDoctype: filePath, id: undefined },
       flags: { setStatus: "done" },
     })
 
@@ -116,9 +125,13 @@ describe("editCommand", () => {
   it("aborts when no updates are provided", () => {
     const filePath = join(tempDir, "note.md")
     writeFileSync(filePath, "---\nstatus: active\n---\n")
+    mockResolve(filePath)
 
     expect(() =>
-      editCommand.callback!({ _: { file: filePath }, flags: {} }),
+      editCommand.callback!({
+        _: { pathOrDoctype: filePath, id: undefined },
+        flags: {},
+      }),
     ).toThrow("abortError")
     expect(cli.abortError).toHaveBeenCalledWith(
       "No updates provided. Use --set key:value or --set-status value",
@@ -128,10 +141,11 @@ describe("editCommand", () => {
   it("aborts on invalid --set format", () => {
     const filePath = join(tempDir, "note.md")
     writeFileSync(filePath, "---\nstatus: active\n---\n")
+    mockResolve(filePath)
 
     expect(() =>
       editCommand.callback!({
-        _: { file: filePath },
+        _: { pathOrDoctype: filePath, id: undefined },
         flags: { set: ["invalid"] },
       }),
     ).toThrow("abortError")
@@ -140,15 +154,20 @@ describe("editCommand", () => {
     )
   })
 
-  it("aborts when file does not exist", () => {
-    const filePath = join(tempDir, "missing", "note.md")
-    mkdirSync(join(tempDir, "missing"), { recursive: true })
+  it("passes two args when id is provided", () => {
+    const filePath = join(tempDir, "note.md")
+    writeFileSync(filePath, "---\nstatus: active\n---\n")
+    mockResolve(filePath)
 
-    expect(() =>
-      editCommand.callback!({
-        _: { file: filePath },
-        flags: { setStatus: "done" },
-      }),
-    ).toThrow("abortError")
+    editCommand.callback!({
+      _: { pathOrDoctype: "notes", id: "1" },
+      flags: { setStatus: "done" },
+    })
+
+    expect(resolveFileModule.resolveFileArg).toHaveBeenCalledWith(
+      expect.anything(),
+      ["notes", "1"],
+      process.cwd(),
+    )
   })
 })

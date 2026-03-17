@@ -37,16 +37,17 @@ describe("readCommand", () => {
     const filePath = join(notesDir, "001.meeting.md")
     vi.mocked(resolveFileModule.resolveFileArg).mockReturnValue(filePath)
 
-    readCommand.callback!({ _: { file: filePath, id: undefined }, flags: {} })
+    readCommand.callback!({
+      _: { pathOrDoctype: filePath, id: undefined },
+      flags: {},
+    })
 
     expect(resolveFileModule.resolveFileArg).toHaveBeenCalledWith(
       expect.anything(),
       [filePath],
       process.cwd(),
     )
-    expect(cli.write).toHaveBeenCalledWith(
-      expect.stringContaining("---"),
-    )
+    expect(cli.write).toHaveBeenCalledWith(expect.stringContaining("---"))
   })
 
   it("passes two args when id is provided", () => {
@@ -66,7 +67,7 @@ describe("readCommand", () => {
     const filePath = join(notesDir, "001.meeting.md")
     vi.mocked(resolveFileModule.resolveFileArg).mockReturnValue(filePath)
 
-    readCommand.callback!({ _: { file: "notes", id: "1" }, flags: {} })
+    readCommand.callback!({ _: { pathOrDoctype: "notes", id: "1" }, flags: {} })
 
     expect(resolveFileModule.resolveFileArg).toHaveBeenCalledWith(
       expect.anything(),
@@ -93,7 +94,7 @@ describe("readCommand", () => {
     vi.mocked(resolveFileModule.resolveFileArg).mockReturnValue(filePath)
 
     readCommand.callback!({
-      _: { file: "notes", id: "1" },
+      _: { pathOrDoctype: "notes", id: "1" },
       flags: { sub: "my-sub" },
     })
 

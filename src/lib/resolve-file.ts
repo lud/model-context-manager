@@ -137,11 +137,7 @@ export function resolveFromDoctypeAndId(
  * Tries: absolute as-is, joined with cwd, joined with projectDir.
  * Returns the first existing path, or aborts.
  */
-function locateFile(
-  arg: string,
-  cwd: string,
-  projectDir: string,
-): string {
+function locateFile(arg: string, cwd: string, projectDir: string): string {
   if (isAbsolute(arg)) {
     if (existsSync(arg)) return arg
     abortError(`File not found: ${arg}`)
@@ -203,9 +199,7 @@ function validateProjectFile(
     }
   }
 
-  abortError(
-    `File is not part of any doctype in the project: ${absPath}`,
-  )
+  abortError(`File is not part of any doctype in the project: ${absPath}`)
 }
 
 /**

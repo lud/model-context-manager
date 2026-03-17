@@ -7,7 +7,7 @@ import { resolveFileArg } from "../lib/resolve-file.js"
 export const readCommand = command(
   {
     name: "read",
-    parameters: ["<file>", "[id]"],
+    parameters: ["<pathOrDoctype>", "[id]"],
     help: { description: "Output the contents of a document" },
     flags: {
       sub: {
@@ -19,8 +19,8 @@ export const readCommand = command(
   (argv) => {
     const project = getProject({ sub: argv.flags.sub })
     const args: [string, string] | [string] = argv._.id
-      ? [argv._.file, argv._.id]
-      : [argv._.file]
+      ? [argv._.pathOrDoctype, argv._.id]
+      : [argv._.pathOrDoctype]
     const filePath = resolveFileArg(project, args, process.cwd())
     const content = readFileSyncOrAbort(filePath, "utf-8")
     cli.write(content)

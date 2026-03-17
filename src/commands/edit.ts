@@ -2,7 +2,9 @@ import { command } from "cleye"
 import * as cli from "../lib/cli.js"
 import { readFileSyncOrAbort, writeFileSyncOrAbort } from "../lib/fs.js"
 import { setFrontmatterProperty } from "../lib/frontmatter.js"
+import { getProject } from "../lib/project.js"
 import { toDisplayPath } from "../lib/paths.js"
+import { resolveFileArg } from "../lib/resolve-file.js"
 
 type FrontmatterUpdate = { key: string; value: string }
 
@@ -34,7 +36,7 @@ function resolveUpdates(flags?: {
 export const editCommand = command(
   {
     name: "edit",
-    parameters: ["<file>"],
+    parameters: ["<pathOrDoctype>", "[id]"],
     help: { description: "Edit frontmatter properties in a file" },
     flags: {
       set: {
@@ -45,10 +47,18 @@ export const editCommand = command(
         type: String,
         description: "Set status (shorthand for --set status:value)",
       },
+      sub: {
+        type: String,
+        description: "Use a specific subcontext",
+      },
     },
   },
   (argv) => {
-    const filePath = argv._.file
+    const project = getProject({ sub: argv.flags.sub })
+    const args: [string, string] | [string] = argv._.id
+      ? [argv._.pathOrDoctype, argv._.id]
+      : [argv._.pathOrDoctype]
+    const filePath = resolveFileArg(project, args, process.cwd())
     const updates = resolveUpdates(argv.flags)
 
     if (updates.length === 0) {
@@ -73,7 +83,7 @@ export const editCommand = command(
  * ## Examples
  *
  * ```sh
- * mcm edit notes/001.note.md --set status:specified
+ * mcm edit notes 1 --set status:specified
  * mcm edit notes/001.note.md --set owner:alice --set-status done
  * ```
  */
