@@ -3,6 +3,7 @@ import { doneCommand } from "./commands/done.js"
 import { editCommand } from "./commands/edit.js"
 import { listCommand } from "./commands/list.js"
 import { newCommand } from "./commands/new.js"
+import { readCommand } from "./commands/read.js"
 import { nextCommand } from "./commands/next.js"
 import { seqfixCommand } from "./commands/seqfix.js"
 import { subCommand } from "./commands/sub.js"
@@ -20,6 +21,7 @@ const argv = cleyeCLI({
     listCommand,
     newCommand,
     nextCommand,
+    readCommand,
     doneCommand,
     editCommand,
     subCommand,
