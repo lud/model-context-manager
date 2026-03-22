@@ -12,6 +12,8 @@ A document is a markdown file with YAML frontmatter. Every document has a global
 
 Filename format: `{ID}.{tag}.{slug}.md`
 
+The ID is an integer. The zero-padded representation (e.g. `001`) is only for filesystem sorting — `001`, `1`, and `0001` all refer to the same document. Commands that accept a document reference accept any integer with any number of leading zeroes. The zero-padding width is determined by the doctype's mask (default `"000"` = 3 digits).
+
 Examples:
 - `001.feat.user-auth.md`
 - `002.spec.login-flow.md`
@@ -109,6 +111,16 @@ context/features/
 
 IDs are unique across all doctypes. To determine the next ID, scan all document files and take `max + 1`. An index cache may be introduced later (`~/.config/pm/projects/{project-hash}/index.json`) with mtime-based invalidation against `.pm.current`.
 
+### File scanning
+
+Document discovery uses a **generator function** (`function*`) to avoid loading all files into memory at once. Commands consume the generator lazily — e.g. `read 5` stops after finding the matching ID.
+
+**V1 (simple):** Walk all directories belonging to doctypes that have no parent. Recursively scan subdirectories. For each `.md` file, parse the filename to extract ID and tag. Yield a document entry (ID, tag, slug, path) for files whose tag matches a known doctype.
+
+**Future (smart):** Use the doctype config to navigate the hierarchy. For example, to find tasks: read config to learn tasks belong to specs, specs belong to features, features have `intermediateDir: true` and `dir: "context/features"`. Start at `<project>/context/features/`, list directories matching `*.feat.*`, then scan within each for files matching `*.task.*`. This avoids scanning unrelated directories entirely.
+
+The generator yields lightweight entries (path, parsed filename components). Frontmatter is only read when needed by the caller (e.g. for status filtering or parent resolution).
+
 ### Current document
 
 The current document is tracked in `.pm.current` in the project root. This file contains a single document ID.
@@ -182,6 +194,14 @@ A minimal `.pm.json` only needs to set `dir` on the root doctype:
 ```
 
 This gives you `feature`, `spec`, and `task` with all defaults applied.
+
+### JSON Schema
+
+A JSON Schema file is generated from the Zod schema via `z.toJSONSchema()` and written to `resources/pm-project.schema.json`. This file is published via jsdelivr (from the GitHub repo) so editors can provide autocomplete and validation.
+
+The `init` command includes a `$schema` property in `.pm.json` pointing to the jsdelivr URL. The `$schema` field is stripped during project loading (passthrough in Zod).
+
+A `tools/build-json-schema.ts` script generates the schema file. Run it after any schema change.
 
 ### Validation
 
