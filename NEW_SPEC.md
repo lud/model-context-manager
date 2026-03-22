@@ -52,20 +52,28 @@ title: Add JWT middleware
 
 A document's parent must be of the doctype specified in the child's doctype config. For example, if `task.parent = "spec"`, then a task's `parent` field must reference a spec document.
 
+### Filename parsing
+
+The separator is always `.` (not configurable). A valid document filename matches the pattern `{digits}.{tag}.{slug}.md`. During scanning, the tag is matched against known doctype tags to determine the document's type.
+
+Files that don't match this pattern are ignored by the scanner — projects can have non-PM files in the same directories.
+
 ### Directory layout
 
-A document's location on disk is determined by:
+**Self directory**: every document has a "self directory" — the directory that child documents resolve against.
 
-1. Find the parent document (or project root if no parent).
-2. Resolve the parent's **self directory**:
-   - If the parent's doctype has `intermediateDir: true`, self directory is the parent's own directory (e.g. `context/features/001.feat.user-auth/`).
-   - If `intermediateDir: false`, self directory is the parent's containing directory.
-   - If no parent, self directory is the project root.
-3. Append the doctype's `dir` to get the target directory.
-4. Place the file in that directory.
+- If the document's doctype has `intermediateDir: true`: self directory is the document's own named directory (e.g. `001.feat.user-auth/`). The document file lives inside this directory with the same name (`001.feat.user-auth/001.feat.user-auth.md`).
+- If `intermediateDir: false`: self directory is the same as its containing directory. The document is just a file, no directory created.
 
-Documents with `intermediateDir: true` also have an eponymous file inside their directory:
-`001.feat.user-auth/001.feat.user-auth.md`
+**Resolving where a new document goes** (algorithm used by `pm new`):
+
+1. Determine the **base directory**:
+   - If the document has no parent doctype: base = project root.
+   - If the document has a parent doctype and a parent document is given: base = parent document's **self directory**.
+   - If the document has an optional parent and no parent is given: base = project root.
+2. Append the doctype's `dir` to the base directory. (`"."` means same directory.)
+3. This is the **target directory**. The file is placed here.
+4. If the doctype has `intermediateDir: true`: create a subdirectory named `{ID}.{tag}.{slug}/` inside the target directory, and place the file inside it as `{ID}.{tag}.{slug}.md`.
 
 #### Example: flat children
 
@@ -109,7 +117,9 @@ context/features/
 
 ### Global IDs
 
-IDs are unique across all doctypes. To determine the next ID, scan all document files and take `max + 1`. An index cache may be introduced later (`~/.config/pm/projects/{project-hash}/index.json`) with mtime-based invalidation against `.pm.current`.
+IDs are unique across all doctypes. To determine the next ID, scan all document files and take `max + 1`. If no documents exist, the first ID is `1`.
+
+An index cache may be introduced later (`~/.config/pm/projects/{project-hash}/index.json`) with mtime-based invalidation against `.pm.current`.
 
 ### File scanning
 
@@ -170,6 +180,15 @@ The following doctypes are built-in. User config is deep-merged on top:
   }
 }
 ```
+
+### Config loading algorithm
+
+1. **Read** `.pm.json` from disk. Parse as JSON.
+2. **Strip `$schema`** field if present.
+3. **Null removal**: for each entry in `doctypes` where the value is `null`, record the key and delete it from user config. These keys will also be deleted from the defaults.
+4. **Deep merge**: start with a copy of the default doctypes (minus any null-removed keys). Deep-merge user config on top. Object values merge recursively, arrays and primitives are replaced by the user value.
+5. **Validate**: run the merged result through the Zod schema. This catches missing required fields (e.g. a top-level doctype without `dir`), invalid references, circular parents, duplicate tags, etc.
+6. **Resolve paths**: convert relative `dir` values to absolute paths based on the project root.
 
 ### Merge semantics
 
@@ -235,12 +254,12 @@ List documents.
 - No arguments: list all open documents.
 - `-t <doctype>`: filter by doctype.
 - `-p <id>`: filter to descendants of the given document (children, grandchildren, etc.).
-- `--open`: documents not in a closed status (default).
+- `--open`: documents not in a closed status (default). "Closed" is determined per-doctype: a document is closed if its `status` is in its doctype's `closedStatuses` list.
 - `--closed`: documents in a closed status.
 - `--status <status>`: documents with this exact status.
 - Without `--open`, `--closed`, or `--status`: defaults to `--open`.
 
-Output: one file per line, showing ID, tag, title, and status.
+Output: one document per line. Format is kept simple and iterable (details to be refined during implementation).
 
 ### `pm read <id>`
 
@@ -260,8 +279,18 @@ Set the document's status to the first entry in its doctype's `closedStatuses`.
 
 ### `pm current [<id>]`
 
-- Without argument: display the current document and its full hierarchy (ancestors and children at each level with statuses).
+- Without argument: display the current document and its full hierarchy.
 - With argument: set the current document and display the hierarchy.
+
+Hierarchy display shows the **ancestor chain** (from root to current) and **direct children** of the current document, with doctype, title, and status for each. Example:
+
+```
+feature 001 user-auth (new)
+  spec 002 login-flow (specified)
+  spec 005 password-reset (new)       <-- current
+    task 006 reset-email-template (new)
+    task 007 token-expiry-check (new)
+```
 
 ### `pm status`
 
@@ -286,6 +315,14 @@ Interactive setup. Creates `.pm.json`, adds `.pm.current` to `.gitignore`.
 ### `pm which`
 
 Print the path to `.pm.json`.
+
+## Edge cases and error handling
+
+- **`.pm.current` references a deleted/missing document**: warn and clear the current document.
+- **File on disk has no frontmatter or invalid frontmatter**: the scanner skips it. It is not a PM document. Commands that target it by ID and the document when filename corresponds to the id/tag/slug scheme will display an explicit error message.
+- **Duplicate IDs on disk**: `pm tidy` detects and renumbers. Other commands use the first match found by the scanner (They will not see duplicates as the scanner is a generator).
+- **Parent reference points to a document of the wrong doctype**: `pm tidy` reports it. `pm edit --parent <id>` validates the parent's doctype at edit time.
+- **Doctype tag not found in config**: the file is ignored by the scanner. This can happen if a doctype was removed from config — `pm tidy` would report these as unrecognized files.
 
 ## Frontmatter
 
