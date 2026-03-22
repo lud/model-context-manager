@@ -348,6 +348,63 @@ created_on: {date}
 - **Testing**: vitest
 - **Schema validation**: zod
 
+## Architecture
+
+### Functional core / CLI shell
+
+The codebase is split into two layers:
+
+**Core** (`src/core/`): pure functions that take simple arguments and return data. The core does not parse CLI arguments, does not print output, and does not call `process.exit`. Core functions accept the resolved project config as a parameter, making them easy to test without mocking.
+
+```typescript
+// Core function example
+function editDocument(
+  project: ResolvedProject,
+  id: number,
+  options: { setParent?: number; setProperties?: Record<string, unknown> }
+): EditResult
+
+// Core function for status
+function getProjectStatus(project: ResolvedProject): ProjectStatus
+```
+
+**CLI shell** (`src/commands/`): thin wrappers that parse arguments, load the project, call core functions, and format output. Each command:
+
+1. Parses CLI arguments (via cleye).
+2. Calls `loadProjectFrom(process.cwd())` to locate and load `.pm.json`.
+3. Calls one or more core functions with the resolved project and parsed arguments.
+4. Formats and prints the result using the output module.
+
+This means the core can be tested by constructing a project config and calling functions directly — no mocking of CLI or project loading needed. The CLI shell is tested separately with mocks.
+
+### Project loading
+
+`loadProjectFrom(cwd: string)` locates and loads the project:
+
+1. Walk up from `cwd` to `/`, looking for `.pm.json` in each directory.
+2. If not found, abort with error: `"Could not locate .pm.json"` with detail (`"not found"` or a filesystem error like `"could not read /home: permission denied"`).
+3. If found, read and parse the file, apply defaults/merge/validation (see "Project config loading algorithm").
+4. Return a `ResolvedProject` with **absolute paths everywhere**: `projectDir` is the absolute path of the directory containing `.pm.json`, and all doctype `dir` values are resolved to absolute paths from `projectDir`.
+
+Using absolute paths internally avoids ambiguity — relative paths only exist in `.pm.json` on disk. Tests construct `ResolvedProject` values directly with absolute paths to temp directories.
+
+### Filesystem error formatting
+
+The filesystem helpers (`src/lib/fs.ts`) wrap `node:fs` calls. On failure they format the OS error into a human-readable message and abort:
+
+- Wrappers call `abortError` with a message describing what went wrong and why.
+- The error messages should be explicit enough for both humans and LLM agents to understand: e.g. `"Could not read file context/features/001.feat.auth.md: no such file or directory"`.
+- Filesystem errors from project loading (walking up to find `.pm.json`) use the same formatting: `"Could not locate .pm.json: could not read /home: permission denied"`.
+
+| Function                           | Wraps           |
+| ---------------------------------- | --------------- |
+| `mkdirSyncOrAbort(path, opts)`     | `mkdirSync`     |
+| `readdirSyncOrAbort(path)`         | `readdirSync`   |
+| `readFileSyncOrAbort(path)`        | `readFileSync`  |
+| `writeFileSyncOrAbort(path, data)` | `writeFileSync` |
+
+Other filesystem operations should follow the same pattern.
+
 ## Conventions
 
 ### Two kinds of commands
@@ -372,26 +429,20 @@ All day-to-day command output goes through these helpers:
 
 ### Path display
 
-Paths printed by commands are relative to CWD when the path is a child of CWD, otherwise absolute.
+Paths printed by commands are relative to CWD when the path is a child of CWD, otherwise absolute. Use `formatPath(path, cwd)` for this.
 
-### File system helpers (`src/lib/fs.ts`)
+### Shared formatters
 
-Wrappers around `node:fs` that turn filesystem errors into human-readable (and agent-readable) error messages, then exit the command cleanly via `abortError`. Commands should use these instead of calling `node:fs` directly.
+Some output patterns are reused across commands. These should be extracted into shared formatter functions:
 
-| Function                           | Wraps           |
-| ---------------------------------- | --------------- |
-| `mkdirSyncOrAbort(path, opts)`     | `mkdirSync`     |
-| `readdirSyncOrAbort(path)`         | `readdirSync`   |
-| `readFileSyncOrAbort(path)`        | `readFileSync`  |
-| `writeFileSyncOrAbort(path, data)` | `writeFileSync` |
-
-Other filesystem operations should follow the same pattern.
+- **Hierarchy formatter**: used by both `pm current` and `pm status` to display the ancestor chain and children of a document.
+- **Document line formatter**: used by `pm list` and hierarchy displays to format a single document entry (doctype, ID, title, status).
 
 ### Testing
 
 - **Framework**: vitest. Every command and lib module should have a matching `.test.ts`.
-- **Commands are tested by calling exported functions directly**, not by spawning a subprocess.
-- **Mocking**: `vi.mock("../lib/project.js")` + a `mockProject()` helper to inject project state. `vi.mock("../lib/cli.js")` to capture output in day-to-day command tests. `vi.mock("@clack/prompts")` for interactive commands.
+- **Core functions** are tested directly: construct a `ResolvedProject`, call the function, assert on the returned data. No mocking needed.
+- **CLI commands** are tested with mocks: `vi.mock("../lib/cli.js")` to capture output. `vi.mock("@clack/prompts")` for interactive commands.
 - **Abort mocking**: mocks for `abortError`/`abort` must throw to stop execution in tests.
 - **Fixtures**: real files in `test/fixtures/`. Prefer over mocking `fs`.
 - **Mutable fixtures**: when tests need to write/rename/delete files, use `createTestWorkspace(label)` which copies fixtures into `/tmp` and cleans up automatically via `afterAll`.
@@ -401,12 +452,19 @@ Other filesystem operations should follow the same pattern.
 ```
 src/
   main.ts                   # Entry point — registers commands with cleye
-  commands/                 # One file per command (+ matching .test.ts)
+  commands/                 # CLI shell — one file per command (+ matching .test.ts)
+  core/                     # Functional core — pure functions, no CLI deps
+    edit.ts                 # editDocument()
+    list.ts                 # listDocuments()
+    status.ts               # getProjectStatus()
+    new.ts                  # createDocument()
+    scanner.ts              # document generator function
+    ...
   lib/
-    cli.ts                  # Output helpers
+    cli.ts                  # Output helpers (write, warning, error, etc.)
     fs.ts                   # Filesystem wrappers with abort-on-error
-    project.ts              # Project loading and Zod schema
-    project.test-helpers.ts # mockProject() helper for tests
+    project.ts              # Project loading, schema, defaults, merge
+    format.ts               # Shared formatters (hierarchy, document line, path)
 test/
   fixtures/                 # Real files used by tests
 ```
