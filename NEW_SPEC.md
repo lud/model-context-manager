@@ -39,7 +39,7 @@ Statuses are free-form strings. Only `closedStatuses` are validated — everythi
 
 ### Hierarchy
 
-Parent-child relationships are stored in document frontmatter, not in config. The config defines which doctype *can* have a parent of which type; the frontmatter records the actual link.
+Parent-child relationships are stored in document frontmatter, not in the project config. The project config defines which doctype *can* have a parent of which type; the frontmatter records the actual link.
 
 ```yaml
 ---
@@ -50,11 +50,11 @@ title: Add JWT middleware
 ---
 ```
 
-A document's parent must be of the doctype specified in the child's doctype config. For example, if `task.parent = "spec"`, then a task's `parent` field must reference a spec document.
+A document's parent must be of the doctype specified in the child's doctype definition in the project config. For example, if `task.parent = "spec"`, then a task's `parent` field must reference a spec document.
 
 ### Filename parsing
 
-The separator is always `.` (not configurable). A valid document filename matches the pattern `{digits}.{tag}.{slug}.md`. During scanning, the tag is matched against known doctype tags to determine the document's type.
+The separator is always `.` (not configurable). A valid document filename matches the pattern `{digits}.{tag}.{slug}.md`. During scanning, the tag is matched against doctype tags from the project config to determine the document's type.
 
 Files that don't match this pattern are ignored by the scanner — projects can have non-PM files in the same directories.
 
@@ -127,7 +127,7 @@ Document discovery uses a **generator function** (`function*`) to avoid loading 
 
 **V1 (simple):** Walk all directories belonging to doctypes that have no parent. Recursively scan subdirectories. For each `.md` file, parse the filename to extract ID and tag. Yield a document entry (ID, tag, slug, path) for files whose tag matches a known doctype.
 
-**Future (smart):** Use the doctype config to navigate the hierarchy. For example, to find tasks: read config to learn tasks belong to specs, specs belong to features, features have `intermediateDir: true` and `dir: "context/features"`. Start at `<project>/context/features/`, list directories matching `*.feat.*`, then scan within each for files matching `*.task.*`. This avoids scanning unrelated directories entirely.
+**Future (smart):** Use the project config to navigate the hierarchy. For example, to find tasks: read config to learn tasks belong to specs, specs belong to features, features have `intermediateDir: true` and `dir: "context/features"`. Start at `<project>/context/features/`, list directories matching `*.feat.*`, then scan within each for files matching `*.task.*`. This avoids scanning unrelated directories entirely.
 
 The generator yields lightweight entries (path, parsed filename components). Frontmatter is only read when needed by the caller (e.g. for status filtering or parent resolution).
 
@@ -157,7 +157,7 @@ Located at the project root. Discovered by walking up from CWD.
 
 ### Default doctypes
 
-The following doctypes are built-in. User config is deep-merged on top:
+The following doctypes are built-in. User project config is deep-merged on top:
 
 ```json
 {
@@ -181,7 +181,7 @@ The following doctypes are built-in. User config is deep-merged on top:
 }
 ```
 
-### Config loading algorithm
+### Project config loading algorithm
 
 1. **Read** `.pm.json` from disk. Parse as JSON.
 2. **Strip `$schema`** field if present.
@@ -192,7 +192,7 @@ The following doctypes are built-in. User config is deep-merged on top:
 
 ### Merge semantics
 
-User config is deep-merged on top of defaults (e.g. using lodash `merge`). The merged result is validated against the Zod schema.
+User project config is deep-merged on top of defaults (e.g. using lodash `merge`). The merged result is validated against the Zod schema.
 
 - **Object values**: deep-merged recursively (user fields override defaults per-key).
 - **Array values**: replaced entirely (user's array wins).
@@ -224,7 +224,7 @@ A `tools/build-json-schema.ts` script generates the schema file. Run it after an
 
 ### Validation
 
-After merging defaults and user config:
+After merging defaults and user project config:
 
 - Every doctype with a `parent` must reference an existing doctype.
 - Every top-level doctype (no `parent`) must have an explicit `dir`.
@@ -270,7 +270,7 @@ Print the full contents of a document to stdout.
 Update frontmatter properties. Special handling:
 
 - `status:<value>` updates the status.
-- `parent:<id>` updates the parent reference (validated against doctype config).
+- `parent:<id>` updates the parent reference (validated against the doctype's `parent` field in the project config).
 - `-p <id>` shorthand for `parent:<id>`.
 
 ### `pm done <id>`
@@ -304,7 +304,7 @@ Project overview:
 Reconcile filesystem with metadata. Dry-run by default, `-f` to apply.
 
 - **Renumber**: fix ID gaps (reassign IDs sequentially, update all `parent` references).
-- **Relocate**: move files to their correct directory based on current doctype config and parent relationships.
+- **Relocate**: move files to their correct directory based on the current project config and parent relationships.
 - **Orphans**: documents with a `parent` field referencing a non-existent ID. Prompt for a new parent or remove the link.
 - **Rename**: update filenames to match current tag/slug conventions.
 
@@ -321,8 +321,8 @@ Print the path to `.pm.json`.
 - **`.pm.current` references a deleted/missing document**: warn and clear the current document.
 - **File on disk has no frontmatter or invalid frontmatter**: the scanner skips it. It is not a PM document. Commands that target it by ID and the document when filename corresponds to the id/tag/slug scheme will display an explicit error message.
 - **Duplicate IDs on disk**: `pm tidy` detects and renumbers. Other commands use the first match found by the scanner (They will not see duplicates as the scanner is a generator).
-- **Parent reference points to a document of the wrong doctype**: `pm tidy` reports it. `pm edit --parent <id>` validates the parent's doctype at edit time.
-- **Doctype tag not found in config**: the file is ignored by the scanner. This can happen if a doctype was removed from config — `pm tidy` would report these as unrecognized files.
+- **Parent reference points to a document of the wrong doctype**: `pm tidy` reports it. `pm edit --parent <id>` validates the parent's doctype against the project config at edit time.
+- **Doctype tag not found in project config**: the file is ignored by the scanner. This can happen if a doctype was removed from the project config — `pm tidy` would report these as unrecognized files.
 
 ## Frontmatter
 
