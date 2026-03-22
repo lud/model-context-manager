@@ -21,7 +21,6 @@ typecheck:
 schema:
   npx tsx tools/build-json-schema.ts
 
-
 site:
   npx tsx tools/build-site.ts
 
