@@ -277,27 +277,45 @@ Update frontmatter properties. Special handling:
 
 Set the document's status to the first entry in its doctype's `closedStatuses`.
 
+### `pm show <id>`
+
+Display detailed information about a single document:
+
+1. **Document properties**: doctype, ID, path, title, status.
+2. **Parent hierarchy**: ancestor chain from root to this document (doctype, ID, title, status for each).
+3. **Children**: direct children of this document (doctype, ID, title, status for each). Requires a full scan.
+
+Example output:
+
+```
+doctype: spec
+id: 005
+path: context/features/001.feat.user-auth/005.spec.password-reset.md
+title: Password reset
+status: new
+
+Parents:
+  feature 001 user-auth (new)
+
+Children:
+  task 006 reset-email-template (new)
+  task 007 token-expiry-check (new)
+```
+
 ### `pm current [<id>]`
 
-- Without argument: display the current document and its full hierarchy.
-- With argument: set the current document and display the hierarchy.
+- Without argument: display the current document using the same format as `pm show`.
+- With argument: set the current document and display it using `pm show` format.
+- If no current document is set and no argument given: inform the user.
 
-Hierarchy display shows the **ancestor chain** (from root to current) and **direct children** of the current document, with doctype, title, and status for each. Example:
-
-```
-feature 001 user-auth (new)
-  spec 002 login-flow (specified)
-  spec 005 password-reset (new)       <-- current
-    task 006 reset-email-template (new)
-    task 007 token-expiry-check (new)
-```
+Internally, `pm current` delegates to the same core function as `pm show`.
 
 ### `pm status`
 
 Project overview:
 
 - Count of open/closed documents per doctype.
-- If a current document is set: display the full hierarchy with titles and statuses.
+- If a current document is set: display the current document info using `pm show` format.
 
 ### `pm tidy [-f]`
 
